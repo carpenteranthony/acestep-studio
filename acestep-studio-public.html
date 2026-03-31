@@ -211,6 +211,21 @@ https://open.spotify.com/playlist/..."></textarea>
             <option value="reimagined">Volledig herwerkt</option>
           </select>
         </div>
+        <div class="config-row">
+          <div class="config-label">Promptdetail</div>
+          <select id="promptDensity">
+            <option value="minimal">Minimal</option>
+            <option value="balanced" selected>Balanced</option>
+            <option value="rich">Rich</option>
+          </select>
+        </div>
+        <div class="config-row">
+          <div class="config-label">Seed lock</div>
+          <select id="seedMode">
+            <option value="random" selected>Nieuw per variant</option>
+            <option value="locked">Vast per track</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -513,64 +528,270 @@ async function fetchAudioFeatures(ids) {
   return m;
 }
 
+
+// ============================================================
+// PROMPT PROFILES
+// ============================================================
+function normalizeGenreList(genres = []) {
+  return genres.map(g => String(g || '').toLowerCase()).filter(Boolean);
+}
+
+function dedupeTags(tags, maxCount = 10) {
+  const seen = new Set();
+  const cleaned = [];
+  for (const tag of tags) {
+    const t = String(tag || '').trim().replace(/\s+/g, ' ');
+    const key = t.toLowerCase();
+    if (!t || seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push(t);
+    if (cleaned.length >= maxCount) break;
+  }
+  return cleaned;
+}
+
+function trackTextBlob(track, genres = []) {
+  const artistNames = (track.artists || []).map(a => a.name || '').join(' ').toLowerCase();
+  const trackName = String(track.name || '').toLowerCase();
+  return [artistNames, trackName, genres.join(' ').toLowerCase()].join(' ');
+}
+
+function chooseProfile(track, features, genres = []) {
+  const gs = normalizeGenreList(genres);
+  const blob = trackTextBlob(track, gs);
+  const bpm = features ? Math.round(features.tempo || 120) : 120;
+  const dance = features ? Number(features.danceability || 0.5) : 0.5;
+  const acoustic = features ? Number(features.acousticness || 0.2) : 0.2;
+
+  const has = (arr) => arr.some(k => blob.includes(k) || gs.some(g => g.includes(k)));
+
+  if (has(['shakira', 'latin', 'reggaeton', 'champeta', 'latin pop', 'tropical'])) {
+    return {
+      family: 'latin-pop',
+      desc: 'latin pop / tropical pop',
+      tags: [
+        'latin pop',
+        'tropical pop',
+        'tight rhythm guitar',
+        'warm bass guitar',
+        'punchy congas',
+        'timbales',
+        'syncopated latin groove',
+        'bright polished mix',
+      ],
+    };
+  }
+
+  if (has(['raye', 'disco', 'nu disco', 'funk', 'soul'])) {
+    return {
+      family: 'disco-funk',
+      desc: 'disco / funk',
+      tags: [
+        'disco funk',
+        'live brass section',
+        'slap bass',
+        'tight funk drums',
+        'wah guitar',
+        'four-on-the-floor groove',
+        'glossy studio mix',
+      ],
+    };
+  }
+
+  if (has(['ofenbach', 'deep house', 'house', 'melodic house', 'dance'])) {
+    return {
+      family: 'deep-house',
+      desc: 'deep house / melodic house',
+      tags: [
+        'deep house',
+        'melodic house',
+        'punchy four-on-the-floor kick',
+        'analog bass',
+        'rhodes chords',
+        'subtle synth layers',
+        'steady club groove',
+        'clean wide mix',
+      ],
+    };
+  }
+
+  if (has(['taylor swift', 'indie folk', 'folk', 'singer-songwriter']) || acoustic > 0.55) {
+    return {
+      family: 'indie-folk',
+      desc: 'indie folk / acoustic pop',
+      tags: [
+        'indie folk',
+        'fingerpicked acoustic guitar',
+        'upright bass',
+        'brushed drums',
+        'warm piano',
+        'intimate organic groove',
+        'natural room ambience',
+      ],
+    };
+  }
+
+  if (dance > 0.72 && bpm >= 118) {
+    return {
+      family: 'dance-pop',
+      desc: 'dance pop',
+      tags: [
+        'dance pop',
+        'tight programmed drums',
+        'warm synth bass',
+        'bright synth hooks',
+        'steady pop groove',
+        'radio-ready mix',
+      ],
+    };
+  }
+
+  if (bpm >= 118) {
+    return {
+      family: 'indie-pop',
+      desc: 'indie pop / modern pop',
+      tags: [
+        'indie pop',
+        'clean electric guitar',
+        'solid bass guitar',
+        'tight drums',
+        'subtle synth pads',
+        'steady upbeat groove',
+        'polished mix',
+      ],
+    };
+  }
+
+  return {
+    family: 'cinematic-pop',
+    desc: 'cinematic instrumental pop',
+    tags: [
+      'cinematic pop',
+      'warm piano',
+      'soft pads',
+      'gentle percussion',
+      'bass foundation',
+      'slow building groove',
+      'spacious polished mix',
+    ],
+  };
+}
+
+function applyStyleMode(tags, styleMode) {
+  const extras = {
+    faithful: [],
+    inspired: ['fresh arrangement'],
+    reimagined: ['genre twist', 'unexpected instrumentation'],
+  }[styleMode] || [];
+  return tags.concat(extras);
+}
+
+function applyDensity(tags, density, profile, bpm, creativity) {
+  const map = {
+    minimal: 7,
+    balanced: 9,
+    rich: 11,
+  };
+  let limit = map[density] || 9;
+  if (creativity >= 8 && density !== 'minimal') limit += 1;
+  const extras = [];
+  if (profile.family === 'latin-pop') {
+    extras.push(`${bpm} bpm`, 'energetic', 'instrumental', 'no vocals');
+  } else if (profile.family === 'deep-house') {
+    extras.push(`${bpm} bpm`, 'hypnotic', 'instrumental', 'no vocals');
+  } else if (profile.family === 'disco-funk') {
+    extras.push(`${bpm} bpm`, 'high energy', 'instrumental', 'no vocals');
+  } else if (profile.family === 'indie-folk') {
+    extras.push(`${bpm} bpm`, 'warm intimate feel', 'instrumental', 'no vocals');
+  } else {
+    extras.push(`${bpm} bpm`, 'instrumental', 'no vocals');
+  }
+  return dedupeTags(tags.concat(extras), limit);
+}
+
+function buildDeterministicPrompt(track, features, styleMode, creativity, spotifyGenres = [], density = 'balanced') {
+  const profile = chooseProfile(track, features, spotifyGenres);
+  const bpm = features ? Math.round(features.tempo || 120) : 120;
+  const tags = applyDensity(applyStyleMode(profile.tags, styleMode), density, profile, bpm, creativity);
+  return {
+    tags: tags.join(', '),
+    lyrics: '',
+    description: profile.desc,
+    prompt: tags.join(', '),
+    family: profile.family,
+  };
+}
 // ============================================================
 // CLAUDE PROMPT GENERATION
 // ============================================================
-async function generatePrompt(track, features, styleMode, creativity, spotifyGenres = []) {
-  const artists   = (track.artists||[]).map(a=>a.name).join(', ');
-  const bpm       = features ? Math.round(features.tempo) : '?';
-  const key       = features ? fmtKey(features.key, features.mode) : '?';
-  const energy    = features ? features.energy    : 0.5;
-  const valence   = features ? features.valence   : 0.5;
-  const dance     = features ? features.danceability : 0.5;
-  const genreStr  = spotifyGenres.join(', ');
-  const acoustic  = features ? features.acousticness : 0.3;
-  const energyWord = energy>0.75?'high energy':energy>0.45?'medium energy':'low energy';
-  const styleNote = {
-    faithful:  'Closely mimic the style and feel of the original.',
-    inspired:  'Take inspiration but add creative reinterpretation.',
-    reimagined:'Radically reimagine in a completely different style.'
-  }[styleMode];
-
-  const userMsg = [
-    'Generate ACE-Step music tags.',
-    'Track: "' + (track.name||'') + '" by ' + artists,
-    'BPM: ' + bpm + ' | Energy: ' + energyWord + ' | Spotify genres: ' + (genreStr||'unknown'),
-    'Style: ' + styleNote,
-    '',
-    'Output ONLY valid JSON. No explanation. No preamble.',
-    '{',
-    '  "tags": "primary genre, subgenre, instrument+adjective, instrument+adjective, instrument+adjective, instrument+adjective, groove, mood, ' + bpm + ' bpm, mix style, no vocals, instrumental",',
-    '  "lyrics": "[inst]",',
-    '  "description": "genre name"',
-    '}',
-    '',
-    'Rules: Use the artist name to determine genre. RAYE=disco/funk/soul. Taylor Swift=indie pop. Shakira=latin pop. Unknown=use Spotify genres or BPM.'
-  ].join('\n');
+async function generatePrompt(track, features, styleMode, creativity, spotifyGenres = [], density = 'balanced') {
+  const deterministic = buildDeterministicPrompt(track, features, styleMode, creativity, spotifyGenres, density);
+  const artists = (track.artists || []).map(a => a.name).join(', ');
+  const bpm = features ? Math.round(features.tempo || 120) : 120;
+  const genreStr = spotifyGenres.join(', ') || 'unknown';
 
   try {
+    const userMsg = [
+      'Return ONLY valid JSON.',
+      'Create concise ACE-Step tags for an instrumental track.',
+      'Track: "' + (track.name || '') + '" by ' + artists,
+      'Detected family: ' + deterministic.description,
+      'BPM: ' + bpm,
+      'Spotify genres: ' + genreStr,
+      'Style mode: ' + styleMode,
+      'Density: ' + density,
+      '',
+      'Rules:',
+      '- ALWAYS instrumental',
+      '- NEVER vocals, lyrics, singing, spoken word, chants, choirs, vocal chops',
+      '- Output 7 to 11 comma-separated tags only',
+      '- Prioritize genre, groove, instrumentation, mix feel',
+      '- Be specific, not generic',
+      '- Stay close to this baseline family: ' + deterministic.tags,
+      '',
+      '{',
+      '  "tags": "tag, tag, tag, tag, tag, tag, tag, tag, instrumental, no vocals",',
+      '  "lyrics": "",',
+      '  "description": "short family description"',
+      '}'
+    ].join('
+');
+
     const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
       method:'POST',
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:300,
-        system: 'Output only valid JSON. No explanation.',
+        max_tokens:220,
+        system: 'Output only valid JSON. No markdown. No explanation. Instrumental only.',
         messages:[{ role:'user', content: userMsg }]
       })
     });
-    if(!resp.ok){ const e=await resp.json(); throw new Error(e.error?.message||resp.status); }
+
+    if(!resp.ok) throw new Error('Claude response ' + resp.status);
     const data = await resp.json();
-    const rawText = data.content.map(b=>b.text||'').join('').trim();
-    const tick3 = String.fromCharCode(96,96,96);
-    const text = rawText.split(tick3+'json').join('').split(tick3).join('').trim();
-    return JSON.parse(text);
+    const rawText = (data.content || []).map(b => b.text || '').join('').trim();
+    const parsed = JSON.parse(rawText);
+    const merged = dedupeTags(
+      String(parsed.tags || '')
+        .split(',')
+        .map(s => s.trim())
+        .concat(deterministic.tags.split(',').map(s => s.trim()))
+        .concat(['instrumental', 'no vocals', 'no singing']),
+      density === 'rich' ? 11 : density === 'minimal' ? 7 : 9
+    );
+    return {
+      tags: merged.join(', '),
+      lyrics: '',
+      description: parsed.description || deterministic.description,
+      prompt: merged.join(', '),
+      family: deterministic.family,
+    };
   } catch(e) {
     log('Claude fallback: ' + e.message, 'warn');
-    return fallbackPrompt(track, features, styleMode);
+    return fallbackPrompt(track, features, styleMode, density, creativity, spotifyGenres);
   }
 }
-
 
 function fallbackPrompt(track, features, styleMode) {
   const bpm      = features ? Math.round(features.tempo) : 120;
@@ -604,15 +825,16 @@ function fallbackPrompt(track, features, styleMode) {
 // ============================================================
 // WAVESPEED ACE-STEP v1.5
 // ============================================================
-async function runAceStep(prompt, durationSec) {
+async function runAceStep(prompt, durationSec, seedValue = null) {
+  const chosenSeed = Number.isInteger(seedValue) ? seedValue : Math.floor(Math.random() * 2147483647);
   const startResp = await fetch('https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/wavespeed-ai/ace-step-1.5', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       tags:     prompt.tags,
-      lyrics:   prompt.lyrics || '[inst]',
+      lyrics:   '',
       duration: durationSec,
-      seed:     Math.floor(Math.random() * 2147483647),
+      seed:     chosenSeed,
     })
   });
 
@@ -778,6 +1000,8 @@ async function startGeneration() {
   const duration   = parseInt(document.getElementById('durationSec').value, 10);
   const creativity = parseInt(document.getElementById('creativitySlider').value, 10);
   const styleMode  = document.getElementById('styleMode').value;
+  const density    = document.getElementById('promptDensity').value;
+  const seedMode   = document.getElementById('seedMode').value;
 
   try {
     log(`${parsed.type} ophalen...`);
@@ -816,7 +1040,7 @@ async function startGeneration() {
 
       const trackArtistIds = (track.artists || []).map(a => a.id).filter(Boolean);
       const trackGenres = await fetchArtistGenres(trackArtistIds);
-      const prompt = await generatePrompt(track, features, styleMode, creativity, trackGenres.length ? trackGenres : spotifyGenres);
+      const prompt = await generatePrompt(track, features, styleMode, creativity, trackGenres.length ? trackGenres : spotifyGenres, density);
       log(`[${track.name}] ${prompt.tags}`, 'success');
 
       const promptArea = document.getElementById(`prompt-area-${index}`);
@@ -842,18 +1066,21 @@ async function startGeneration() {
         grid.before(aceLabel);
       }
 
+      const lockedTrackSeed = Math.floor(Math.random() * 2147483647);
       for (let v = 0; v < variations; v++) {
         if(v > 0) await sleep(12000);
         setVariation(gridId, v, 'generating');
         try {
-          const url = await runAceStep(prompt, duration);
+          const aceSeed = seedMode === 'locked' ? lockedTrackSeed : null;
+          const url = await runAceStep(prompt, duration, aceSeed);
           setVariation(gridId, v, 'done', url);
           log(`[${track.name}] ✓ ACE ${v + 1} klaar`, 'success');
         } catch(e) {
           if(e.message.includes('throttled') || e.message.includes('rate limit')) {
             await sleep(15000);
             try {
-              const url = await runAceStep(prompt, duration);
+              const aceSeed = seedMode === 'locked' ? lockedTrackSeed : null;
+              const url = await runAceStep(prompt, duration, aceSeed);
               setVariation(gridId, v, 'done', url);
               log(`[${track.name}] ✓ ACE ${v + 1} klaar na retry`, 'success');
             } catch(e2) {
