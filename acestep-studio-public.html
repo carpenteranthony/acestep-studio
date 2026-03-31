@@ -629,7 +629,7 @@ async function runAceStep(prompt, durationSec) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      prompt:   prompt.prompt || prompt.tags,
+      tags:     prompt.prompt || prompt.tags,
       lyrics:   '[inst]',
       duration: durationSec,
       seed:     Math.floor(Math.random() * 2147483647),
