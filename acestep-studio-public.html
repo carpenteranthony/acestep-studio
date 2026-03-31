@@ -526,18 +526,28 @@ async function generatePrompt(track, features, styleMode, creativity) {
 
   const creativeNote = creativity>=8?'Be highly experimental.':creativity>=5?'Balance creativity with accessibility.':'Keep it grounded and familiar.';
 
-  const msg = `You are an expert music producer writing ACE-Step AI music generation prompts.
+  const msg = `You are a world-class music producer writing prompts for ACE-Step, an AI music generation model.
+
+Generate an INSTRUMENTAL-ONLY prompt (NO vocals, NO singing, NO rap, NO voice) for this track:
 
 Track: "${track.name}" by ${artists}
 BPM: ${bpm} | Key: ${key} | Energy: ${energy.toFixed(2)} (${energyLabel(energy)})
-Valence: ${valence.toFixed(2)} | Danceability: ${dance.toFixed(2)} | Acousticness: ${acoustic.toFixed(2)} | Instrumentalness: ${instrness.toFixed(2)}
+Valence: ${valence.toFixed(2)} | Danceability: ${dance.toFixed(2)} | Acousticness: ${acoustic.toFixed(2)}
 
 Style directive: ${styleNote} ${creativeNote}
 
+CRITICAL RULES for tags:
+- ALWAYS start tags with "instrumental, no vocals" 
+- Be extremely specific about genre (e.g. "latin pop" not "pop", "deep house" not "house", "indie folk" not "folk")
+- Name 3-5 specific real instruments (e.g. "nylon string guitar, congas, marimba" not just "guitar")
+- Include BPM range and energy descriptors
+- Include production style (e.g. "live recording", "studio production", "lo-fi", "polished mix")
+- 12-16 tags total for maximum control
+
 Respond ONLY with a valid JSON object (no markdown, no preamble):
 {
-  "tags": "6-10 comma-separated tags: genre, subgenre, key instruments, mood, tempo feel",
-  "lyrics": "6-8 lines matching the mood, or empty string for instrumental",
+  "tags": "12-16 comma-separated highly specific tags starting with 'instrumental, no vocals'",
+  "lyrics": "",
   "description": "one sentence internal note"
 }`;
 
@@ -566,9 +576,16 @@ function fallbackPrompt(track, features, styleMode) {
   const energy  = features ? features.energy   : 0.5;
   const valence = features ? features.valence  : 0.5;
   const dance   = features ? features.danceability : 0.5;
-  let genre = dance>0.8?'dance pop, funk':energy>0.7&&bpm>130?'electronic, edm':energy<0.4&&bpm<90?'ambient, lo-fi':'indie pop';
-  const mood = valence>0.6?'uplifting, happy':valence<0.3?'melancholic, dark':'reflective, neutral';
-  return { tags:`${genre}, ${mood}, ${Math.round(bpm)} bpm`, lyrics:'', description:`${styleMode} of ${track.name}` };
+  const acoustic= features ? features.acousticness : 0.3;
+  let genre, instruments;
+  if(dance>0.8 && bpm>120) { genre='latin pop, reggaeton'; instruments='nylon string guitar, congas, bass guitar, brass section'; }
+  else if(energy>0.75 && bpm>128) { genre='deep house, electronic'; instruments='synthesizer, 808 bass, drum machine, piano'; }
+  else if(acoustic>0.6) { genre='indie folk, acoustic'; instruments='acoustic guitar, piano, upright bass, light percussion'; }
+  else if(energy>0.6) { genre='indie rock, alternative'; instruments='electric guitar, bass guitar, drums, keyboard'; }
+  else { genre='ambient pop'; instruments='piano, synth pads, acoustic guitar, soft drums'; }
+  const mood = valence>0.6?'uplifting, euphoric':valence<0.3?'melancholic, brooding':'reflective, atmospheric';
+  const tempo = bpm>130?'uptempo':bpm<90?'slow tempo':'mid tempo';
+  return { tags:`instrumental, no vocals, ${genre}, ${instruments}, ${mood}, ${tempo}, ${Math.round(bpm)} bpm, studio production`, lyrics:'', description:`${styleMode} instrumental of ${track.name}` };
 }
 
 // ============================================================
@@ -585,10 +602,10 @@ async function runAceStep(prompt, durationSec) {
       version: '280fc4f9ee507577f880a167f639c02622421d8fecf492454320311217b688f1',
       input: {
         tags:                prompt.tags,
-        lyrics:              prompt.lyrics || '[instrumental]',
+        lyrics:              '[instrumental]',
         duration:            durationSec,
-        guidance_scale:      7.5,
-        num_inference_steps: 60,
+        guidance_scale:      9.0,
+        num_inference_steps: 100,
       }
     })
   });
