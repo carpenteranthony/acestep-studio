@@ -116,6 +116,10 @@ select:focus{border-color:var(--accent)}
 .variation-generating{display:flex;align-items:center;gap:8px;color:var(--text-dimmer);font-size:10px;letter-spacing:1px;padding:6px 0}
 .spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--warn);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
+.model-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 6px 0 4px; color: var(--text-dim); }
+.ace-label { color: #7c6fff; }
+.lyria-label { color: #34c98a; margin-top: 12px; }
+.lyria-section { margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; }
 .variation-error{font-size:10px;color:var(--red);padding:6px 0}
 .progress-bar-wrap{height:2px;background:var(--border);overflow:hidden;display:none;margin:0 28px 2px}
 .progress-bar-wrap.visible{display:block}
@@ -798,7 +802,7 @@ async function startGeneration() {
       return { track:t, features:feat, card, index:i };
     });
 
-    const total = tracks.length * variations;
+    const total = tracks.length * variations * 2; // ACE + Lyria
     let done = 0;
     setProgress(0, total);
 
@@ -825,41 +829,63 @@ async function startGeneration() {
       }
 
       setTrackStatus(card, 'status-generating', 'GENEREERT');
-      const gridId = `variations-grid-${index}`;
+      const aceGridId = `variations-grid-${index}`;
+      const lyriaGridId = `lyria-grid-${index}`;
 
+      // Add Lyria section to card
+      const lyriaSection = document.createElement('div');
+      lyriaSection.className = 'lyria-section';
+      lyriaSection.innerHTML = '<div class="model-label lyria-label">🎵 LYRIA 3 PRO</div><div class="variations-grid" id="' + lyriaGridId + '"></div>';
+      const aceSection = card.querySelector('.variations-grid').parentElement || card;
+      const aceLabel = document.createElement('div');
+      aceLabel.className = 'model-label ace-label';
+      aceLabel.textContent = '⚡ ACE-STEP 1.5';
+      card.querySelector('.variations-grid').before(aceLabel);
+      card.appendChild(lyriaSection);
+
+      // Run ACE-Step variations
+      log('[' + track.name + '] ACE-Step variaties starten...');
       for(let v=0; v<variations; v++) {
-        // 12s delay between variations to avoid rate limiting (max 6/min = 1 per 10s)
-        if(v > 0) {
-          log(`[${track.name}] Even wachten (12s) voor rate limit...`);
-          await sleep(12000);
-        }
-        setVariation(gridId, v, 'generating');
-        log(`[${track.name}] Variatie ${v+1}/${variations} → ACE-Step...`);
+        if(v > 0) await sleep(12000);
+        setVariation(aceGridId, v, 'generating');
         try {
           const url = await runAceStep(prompt, duration);
-          setVariation(gridId, v, 'done', url);
-          log(`[${track.name}] ✓ Variatie ${v+1} klaar`, 'success');
+          setVariation(aceGridId, v, 'done', url);
+          log('[' + track.name + '] ✓ ACE ' + (v+1) + ' klaar', 'success');
         } catch(e) {
-          // On throttle: wait 15s and retry once
           if(e.message.includes('throttled') || e.message.includes('rate limit')) {
-            log(`[${track.name}] Rate limit — 15s wachten en opnieuw...`, 'warn');
             await sleep(15000);
             try {
               const url = await runAceStep(prompt, duration);
-              setVariation(gridId, v, 'done', url);
-              log(`[${track.name}] ✓ Variatie ${v+1} klaar (retry)`, 'success');
+              setVariation(aceGridId, v, 'done', url);
             } catch(e2) {
-              setVariation(gridId, v, 'error', null, e2.message);
-              log(`[${track.name}] ✗ Variatie ${v+1}: ${e2.message}`, 'error');
+              setVariation(aceGridId, v, 'error', null, e2.message);
             }
           } else {
-            setVariation(gridId, v, 'error', null, e.message);
-            log(`[${track.name}] ✗ Variatie ${v+1}: ${e.message}`, 'error');
+            setVariation(aceGridId, v, 'error', null, e.message);
           }
         }
         done++;
         setProgress(done, total);
       }
+
+      // Run Lyria 3 Pro variations
+      log('[' + track.name + '] Lyria 3 Pro variaties starten...');
+      for(let v=0; v<variations; v++) {
+        if(v > 0) await sleep(5000);
+        setVariation(lyriaGridId, v, 'generating');
+        try {
+          const url = await runLyria(prompt, duration);
+          setVariation(lyriaGridId, v, 'done', url);
+          log('[' + track.name + '] ✓ Lyria ' + (v+1) + ' klaar', 'success');
+        } catch(e) {
+          setVariation(lyriaGridId, v, 'error', null, e.message);
+          log('[' + track.name + '] ✗ Lyria ' + (v+1) + ': ' + e.message, 'error');
+        }
+        done++;
+        setProgress(done, total);
+      }
+
       setTrackStatus(card, 'status-done', 'KLAAR');
     }
     log('✓ Alle generaties voltooid!', 'success');
@@ -943,3 +969,29 @@ async function handleCallback() {
 </script>
 </body>
 </html>
+async function runLyria(prompt, durationSec) {
+  // Lyria uses a descriptive text prompt, not comma-separated tags
+  const lyriaPrompt = prompt.description
+    ? prompt.tags + '. ' + prompt.description
+    : prompt.tags;
+
+  const startResp = await fetch('https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/google/google-lyria-3-pro-music', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: lyriaPrompt,
+      duration: Math.min(durationSec, 30)  // Lyria max is 30s
+    })
+  });
+  if(!startResp.ok) {
+    const e = await startResp.json().catch(() => ({}));
+    throw new Error('Lyria start mislukt: ' + (e.message || e.detail || startResp.status));
+  }
+  const startData = await startResp.json();
+  const requestId = startData.data?.id || startData.id;
+  if(!requestId) throw new Error('Geen request ID van Lyria');
+
+  return await pollResult(requestId);
+}
+
+
