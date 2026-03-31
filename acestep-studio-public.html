@@ -781,7 +781,7 @@ async function generatePrompt(track, features, styleMode, creativity, spotifyGen
     );
     return {
       tags: merged.join(', '),
-      lyrics: '',
+      lyrics: '[inst]',
       description: parsed.description || deterministic.description,
       prompt: merged.join(', '),
       family: deterministic.family,
@@ -831,7 +831,7 @@ async function runAceStep(prompt, durationSec, seedValue = null) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       tags:     prompt.tags,
-      lyrics:   '',
+      lyrics:   '[inst]',
       duration: durationSec,
       seed:     chosenSeed,
     })
