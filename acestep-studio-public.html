@@ -492,6 +492,21 @@ const MODES = ['min','maj'];
 function fmtKey(k,m){ return k===-1?'?':`${KEYS[k]||'?'}${MODES[m]||''}`; }
 function energyLabel(e){ return e>=0.8?'HIGH':e>=0.5?'MED':'LOW'; }
 
+async function fetchArtistGenres(artistIds) {
+  if(!artistIds.length) return [];
+  const token = await getSpotifyToken();
+  try {
+    const r = await fetch(`https://api.spotify.com/v1/artists?ids=${artistIds.slice(0,5).join(',')}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(!r.ok) return [];
+    const d = await r.json();
+    const genres = new Set();
+    (d.artists||[]).forEach(a => (a.genres||[]).forEach(g => genres.add(g)));
+    return [...genres].slice(0, 5);
+  } catch(e) { return []; }
+}
+
 async function fetchAudioFeatures(ids) {
   if(!ids.length) return {};
   const token = await getSpotifyToken();
@@ -512,13 +527,14 @@ async function fetchAudioFeatures(ids) {
 // ============================================================
 // CLAUDE PROMPT GENERATION
 // ============================================================
-async function generatePrompt(track, features, styleMode, creativity) {
+async function generatePrompt(track, features, styleMode, creativity, spotifyGenres = []) {
   const artists   = (track.artists||[]).map(a=>a.name).join(', ');
   const bpm       = features ? Math.round(features.tempo) : '?';
   const key       = features ? fmtKey(features.key, features.mode) : '?';
   const energy    = features ? features.energy    : 0.5;
   const valence   = features ? features.valence   : 0.5;
   const dance     = features ? features.danceability : 0.5;
+  const genreStr  = spotifyGenres && genreStr;
   const acoustic  = features ? features.acousticness : 0.3;
   const instrness = features ? features.instrumentalness : 0.1;
 
@@ -547,38 +563,37 @@ async function generatePrompt(track, features, styleMode, creativity) {
   notGenres.push('jazz', 'jazz fusion', 'hard rock', 'classic rock');
   const avoidStr = notGenres.join(', ');
 
-  const msg = `You are a world-class music producer writing ACE-Step music generation prompts.
+  const msg = `You are an expert music producer. Generate ACE-Step tags for this track.
 
-STEP 1 — Identify the genre from the ARTIST NAME. This is the most important step.
 Artist: \${artists}
 Track: "\${track.name}"
+BPM: \${bpm} | Energy: \${energyWord} | Style: \${styleNote}
 
-What genre is \${artists} ACTUALLY known for? Use your real knowledge.
-- RAYE → disco, soul, R&B, funk
-- Taylor Swift → indie pop, country pop
-- Shakira → latin pop, reggaeton
-- Ofenbach → French house, electronic
-- Do NOT let BPM or danceability override your genre knowledge
+Your ONLY job: identify the correct genre for \${artists} and output comma-separated tags.
 
-STEP 2 — Audio features (use if available):
-BPM: \${bpm} | Energy: \${energyWord} | Danceability: \${dance}
-(If BPM is "?" then no audio data — rely entirely on artist knowledge)
+ARTIST GENRE RULES (memorize these, do not deviate):
+- RAYE = disco funk soul R&B (NOT indie pop, NOT reggaeton)
+- Taylor Swift = indie pop country pop (NOT EDM, NOT reggaeton)  
+- Shakira = latin pop reggaeton (NOT disco)
+- Ofenbach = french house electronic
+- Disney = orchestral cinematic pop
+- If unknown artist: use BPM + energy to guess genre
 
-Style directive: \${styleNote}
+TAG FORMAT (comma-separated, 12-15 items, NO sentences):
+[primary genre], [subgenre], [instrument+adjective], [instrument+adjective], [instrument+adjective], [instrument+adjective], [instrument+adjective], [groove type], [mood], [\${bpm} bpm], [production quality], [no vocals], [instrumental]
 
-STEP 3 — Generate comma-separated TAGS (10-14 items) for ACE-Step:
-- Item 1: correct genre for THIS artist (not a generic genre)
-- Items 2-3: subgenre or era (e.g. "late 70s funk", "2020s synth-pop")
-- Items 4-7: instruments with adjectives (e.g. "punchy brass section", "slapping bass guitar", "tight snare")
-- Items 8-10: groove, mood, BPM if known
-- Item 11+: production style, "no vocals", "instrumental"
+GOOD EXAMPLE for RAYE disco track:
+"disco funk, soul, punchy brass section, slapping electric bass, tight funk drums, wah guitar, organ stabs, four-on-the-floor groove, energetic, 128 bpm, studio production, no vocals, instrumental"
 
-Respond ONLY with valid JSON, no markdown:
+BAD EXAMPLE (too vague):
+"pop, synths, drums, upbeat" — DO NOT do this
+
+Respond ONLY with valid JSON:
 {
-  "tags": "correct genre for this artist, subgenre, instrument+adjective, instrument+adjective, instrument+adjective, instrument+adjective, groove, mood, production style, no vocals",
+  "tags": "your 12-15 comma-separated tags here",
   "lyrics": "[inst]",
-  "description": "one line: artist genre and key instruments"
-}`;
+  "description": "genre: X"
+`;
 
   try {
     const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
@@ -788,7 +803,12 @@ async function startGeneration() {
 
     const ids      = tracks.map(t=>t.id).filter(Boolean);
     const featMap  = ids.length ? await fetchAudioFeatures(ids) : {};
-    log(`✓ Audio features geladen`, 'success');
+
+    // Fetch Spotify genres per artist for better Claude prompts
+    const artistIdSet = new Set();
+    tracks.forEach(t => (t.artists||[]).forEach(a => { if(a.id) artistIdSet.add(a.id); }));
+    const spotifyGenres = await fetchArtistGenres([...artistIdSet]);
+    log(`✓ Spotify genres: ${spotifyGenres.join(', ') || 'geen'}`, 'success');
 
     const container = document.getElementById('tracksContainer');
     const hdr = document.createElement('div');
@@ -812,7 +832,9 @@ async function startGeneration() {
       setTrackStatus(card, 'status-analyzing', 'ANALYSE');
       log(`[${track.name}] Prompt genereren...`);
 
-      const prompt = await generatePrompt(track, features, styleMode, creativity);
+      const trackArtistIds = (track.artists||[]).map(a=>a.id).filter(Boolean);
+      const trackGenres = await fetchArtistGenres(trackArtistIds);
+      const prompt = await generatePrompt(track, features, styleMode, creativity, trackGenres);
       log(`[${track.name}] ${prompt.tags}`, 'success');
 
       const promptArea = document.getElementById(`prompt-area-${index}`);
