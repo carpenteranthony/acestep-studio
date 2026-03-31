@@ -528,7 +528,7 @@ async function generatePrompt(track, features, styleMode, creativity) {
 
   const msg = `You are a world-class music producer writing prompts for ACE-Step, an AI music generation model.
 
-Generate an INSTRUMENTAL-ONLY prompt (NO vocals, NO singing, NO rap, NO voice) for this track:
+Generate an INSTRUMENTAL-ONLY prompt for this track. No vocals, no singing, no rap, no voice of any kind.
 
 Track: "${track.name}" by ${artists}
 BPM: ${bpm} | Key: ${key} | Energy: ${energy.toFixed(2)} (${energyLabel(energy)})
@@ -536,18 +536,14 @@ Valence: ${valence.toFixed(2)} | Danceability: ${dance.toFixed(2)} | Acousticnes
 
 Style directive: ${styleNote} ${creativeNote}
 
-CRITICAL RULES for tags:
-- ALWAYS start tags with "instrumental, no vocals" 
-- Be extremely specific about genre (e.g. "latin pop" not "pop", "deep house" not "house", "indie folk" not "folk")
-- Name 3-5 specific real instruments (e.g. "nylon string guitar, congas, marimba" not just "guitar")
-- Include BPM range and energy descriptors
-- Include production style (e.g. "live recording", "studio production", "lo-fi", "polished mix")
-- 12-16 tags total for maximum control
+ACE-Step works best with very specific tags. Rules:
+- Tags: start with "instrumental", then specific genre (e.g. "latin pop" not "pop"), then 4-6 specific instruments with descriptors (e.g. "fingerpicked nylon guitar" not "guitar"), then mood, tempo, production style. 12-16 tags total.
+- Lyrics field: list ONLY instrument names separated by commas (e.g. "guitar, piano, bass, drums"). This tells ACE-Step which instruments to use. NO words, NO sentences, NO singing.
 
 Respond ONLY with a valid JSON object (no markdown, no preamble):
 {
-  "tags": "12-16 comma-separated highly specific tags starting with 'instrumental, no vocals'",
-  "lyrics": "",
+  "tags": "instrumental, [specific genre], [specific subgenre], [instrument 1], [instrument 2], [instrument 3], [instrument 4], [mood], [energy], [tempo], [production style], [key characteristic]",
+  "lyrics": "[instrument 1], [instrument 2], [instrument 3], [instrument 4]",
   "description": "one sentence internal note"
 }`;
 
@@ -577,15 +573,32 @@ function fallbackPrompt(track, features, styleMode) {
   const valence = features ? features.valence  : 0.5;
   const dance   = features ? features.danceability : 0.5;
   const acoustic= features ? features.acousticness : 0.3;
-  let genre, instruments;
-  if(dance>0.8 && bpm>120) { genre='latin pop, reggaeton'; instruments='nylon string guitar, congas, bass guitar, brass section'; }
-  else if(energy>0.75 && bpm>128) { genre='deep house, electronic'; instruments='synthesizer, 808 bass, drum machine, piano'; }
-  else if(acoustic>0.6) { genre='indie folk, acoustic'; instruments='acoustic guitar, piano, upright bass, light percussion'; }
-  else if(energy>0.6) { genre='indie rock, alternative'; instruments='electric guitar, bass guitar, drums, keyboard'; }
-  else { genre='ambient pop'; instruments='piano, synth pads, acoustic guitar, soft drums'; }
+  let genre, instruments, lyricsInstruments;
+  if(dance>0.8 && bpm>120) {
+    genre='latin pop, reggaeton, salsa';
+    instruments='fingerpicked nylon guitar, congas, timbales, bass guitar, brass section, marimba';
+    lyricsInstruments='nylon guitar, congas, bass, brass, marimba';
+  } else if(energy>0.75 && bpm>125) {
+    genre='deep house, melodic house, electronic';
+    instruments='analog synthesizer, 808 bass, drum machine, rhodes piano, string pads';
+    lyricsInstruments='synthesizer, bass, drums, piano, strings';
+  } else if(acoustic>0.6) {
+    genre='indie folk, singer-songwriter, acoustic';
+    instruments='fingerpicked acoustic guitar, upright piano, upright bass, brushed drums, harmonica';
+    lyricsInstruments='acoustic guitar, piano, bass, drums';
+  } else if(energy>0.6) {
+    genre='indie rock, alternative rock';
+    instruments='electric guitar, bass guitar, drums, organ, synth';
+    lyricsInstruments='electric guitar, bass, drums, organ';
+  } else {
+    genre='ambient pop, cinematic';
+    instruments='grand piano, synth pads, acoustic guitar, soft percussion, strings';
+    lyricsInstruments='piano, synth, guitar, strings';
+  }
   const mood = valence>0.6?'uplifting, euphoric':valence<0.3?'melancholic, brooding':'reflective, atmospheric';
   const tempo = bpm>130?'uptempo':bpm<90?'slow tempo':'mid tempo';
-  return { tags:`instrumental, no vocals, ${genre}, ${instruments}, ${mood}, ${tempo}, ${Math.round(bpm)} bpm, studio production`, lyrics:'', description:`${styleMode} instrumental of ${track.name}` };
+  const tags = `instrumental, ${genre}, ${instruments}, ${mood}, ${tempo}, ${Math.round(bpm)} bpm, studio production, high fidelity`;
+  return { tags, lyrics:lyricsInstruments, description:`${styleMode} instrumental of ${track.name}` };
 }
 
 // ============================================================
@@ -602,10 +615,12 @@ async function runAceStep(prompt, durationSec) {
       version: '280fc4f9ee507577f880a167f639c02622421d8fecf492454320311217b688f1',
       input: {
         tags:                prompt.tags,
-        lyrics:              '[instrumental]',
+        lyrics:              prompt.lyrics,
         duration:            durationSec,
         guidance_scale:      9.0,
         num_inference_steps: 100,
+        scheduler:           'euler',
+        seed:                Math.floor(Math.random() * 2147483647),
       }
     })
   });
