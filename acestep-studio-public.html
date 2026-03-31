@@ -563,7 +563,7 @@ Respond ONLY with valid JSON, no markdown, no backtick code blocks:
   "lyrics": "[inst]",
   "description": "one sentence internal note"
 }
-\`;
+`;
 
   try {
     const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
@@ -577,7 +577,7 @@ Respond ONLY with valid JSON, no markdown, no backtick code blocks:
     });
     if(!resp.ok){ const e=await resp.json(); throw new Error(e.error?.message||resp.status); }
     const data = await resp.json();
-    const text = data.content.map(b=>b.text||'').join('').trim().replace(/```json|```/g,'').trim();
+    const rawText = data.content.map(b=>b.text||'').join('').trim(); const text = rawText.replace('```json','').replace('```','').trim();
     return JSON.parse(text);
   } catch(e) {
     log(`Claude fallback (${e.message})`, 'warn');
