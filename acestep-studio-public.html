@@ -526,26 +526,44 @@ async function generatePrompt(track, features, styleMode, creativity) {
 
   const creativeNote = creativity>=8?'Be highly experimental.':creativity>=5?'Balance creativity with accessibility.':'Keep it grounded and familiar.';
 
+  // Build energy/groove/mix descriptors from audio features
+  const energyWord = energy>0.75?'high energy':energy>0.45?'medium energy':'low energy';
+  const grooveType = dance>0.75?'groove-driven and danceable':dance>0.45?'steady, consistent groove':'subtle and laid-back';
+  const mixFeel = acoustic>0.6?'warm, organic, live recording feel':energy>0.7?'punchy, modern, clean mix':'polished, balanced, clean mix';
+  const structureHint = durationSec>60?'clear intro, build-up, core section, breakdown and outro':'loopable with clear intro and hook';
+
   const msg = `You are a world-class music producer writing prompts for ACE-Step, an AI music generation model.
 
-Generate an INSTRUMENTAL-ONLY prompt for this track. No vocals, no singing, no rap, no voice of any kind.
+Generate a fully INSTRUMENTAL prompt (absolutely no vocals, no singing, no voice, no spoken word) inspired by the musical feel of this track.
 
-Track: "${track.name}" by ${artists}
-BPM: ${bpm} | Key: ${key} | Energy: ${energy.toFixed(2)} (${energyLabel(energy)})
-Valence: ${valence.toFixed(2)} | Danceability: ${dance.toFixed(2)} | Acousticness: ${acoustic.toFixed(2)}
+Track data:
+- Track: "${track.name}" by ${artists}
+- BPM: ${bpm} | Key: ${key}
+- Energy: ${energyWord} (${energy.toFixed(2)}) | Danceability: ${dance.toFixed(2)}
+- Acousticness: ${acoustic.toFixed(2)} | Valence: ${valence.toFixed(2)}
 
 Style directive: ${styleNote} ${creativeNote}
 
-ACE-Step works best with very specific tags. Rules:
-- Tags: start with "instrumental", then specific genre (e.g. "latin pop" not "pop"), then 4-6 specific instruments with descriptors (e.g. "fingerpicked nylon guitar" not "guitar"), then mood, tempo, production style. 12-16 tags total.
-- Lyrics field: list ONLY instrument names separated by commas (e.g. "guitar, piano, bass, drums"). This tells ACE-Step which instruments to use. NO words, NO sentences, NO singing.
+Write the ACE-Step prompt as ONE flowing paragraph (2-4 sentences) using this exact structure:
+[SPECIFIC GENRE + optional ERA] + [ENERGY LEVEL] + [3-5 NAMED INSTRUMENTS with adjectives] + [GROOVE: ${grooveType}] + [STRUCTURE: ${structureHint}] + [MIX: ${mixFeel}]
 
-Respond ONLY with a valid JSON object (no markdown, no preamble):
+Rules:
+- Very specific genre: "latin pop" not "pop", "deep house" not "house", "indie folk" not "folk"
+- Every instrument must have an adjective: "warm fingerpicked nylon guitar" not "guitar", "punchy analog 808 bass" not "bass"
+- Name the groove explicitly: four-on-the-floor / swing feel / driving pulse / bouncy / laid-back
+- Avoid generic AI music cliches and EDM festival drops unless genre demands it
+- End with the sentence: "Purely instrumental, no vocals of any kind."
+
+Also output short display_tags for the UI (genre + 1-2 instruments + mood, max 8 words).
+
+Respond ONLY with valid JSON, no markdown, no backtick code blocks:
 {
-  "tags": "instrumental, [specific genre], [specific subgenre], [instrument 1], [instrument 2], [instrument 3], [instrument 4], [mood], [energy], [tempo], [production style], [key characteristic]",
-  "lyrics": "[instrument 1], [instrument 2], [instrument 3], [instrument 4]",
+  "tags": "short UI tags: genre, instrument, mood (max 8 words)",
+  "prompt": "the full 2-4 sentence flowing paragraph prompt for ACE-Step",
+  "lyrics": "[inst]",
   "description": "one sentence internal note"
-}`;
+}
+\`;
 
   try {
     const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
@@ -573,32 +591,21 @@ function fallbackPrompt(track, features, styleMode) {
   const valence = features ? features.valence  : 0.5;
   const dance   = features ? features.danceability : 0.5;
   const acoustic= features ? features.acousticness : 0.3;
-  let genre, instruments, lyricsInstruments;
-  if(dance>0.8 && bpm>120) {
-    genre='latin pop, reggaeton, salsa';
-    instruments='fingerpicked nylon guitar, congas, timbales, bass guitar, brass section, marimba';
-    lyricsInstruments='nylon guitar, congas, bass, brass, marimba';
-  } else if(energy>0.75 && bpm>125) {
-    genre='deep house, melodic house, electronic';
-    instruments='analog synthesizer, 808 bass, drum machine, rhodes piano, string pads';
-    lyricsInstruments='synthesizer, bass, drums, piano, strings';
+  const mood = valence>0.6?'uplifting and euphoric':valence<0.3?'melancholic and introspective':'reflective and atmospheric';
+  const tempo = bpm>130?'uptempo':bpm<90?'slow-tempo':'mid-tempo';
+  let prompt;
+  if(dance>0.8 && bpm>115) {
+    prompt = `Upbeat latin pop track at ${bpm} BPM, high energy, driven by warm fingerpicked nylon guitar, punchy congas, timbales, fat bass guitar and bright brass stabs. Groove-driven and danceable with a syncopated latin rhythm. Clear intro, energetic core, short breakdown and strong outro. Live band feel, warm and lush production mix. Purely instrumental, no vocals of any kind.`;
+  } else if(energy>0.75 && bpm>122) {
+    prompt = `Deep house track at ${bpm} BPM, high energy, built around a punchy four-on-the-floor kick, analog synth bass, lush rhodes piano chords and shimmering string pads. Hypnotic and groove-driven with subtle percussion details. Intro builds gradually into a full drop, then breaks down and rebuilds. Club-ready production with a crisp, modern mix. Purely instrumental, no vocals of any kind.`;
   } else if(acoustic>0.6) {
-    genre='indie folk, singer-songwriter, acoustic';
-    instruments='fingerpicked acoustic guitar, upright piano, upright bass, brushed drums, harmonica';
-    lyricsInstruments='acoustic guitar, piano, bass, drums';
+    prompt = `Indie folk track at ${bpm} BPM, ${mood}, centered on warm fingerpicked acoustic guitar, tender upright piano, soft upright bass and brushed snare drums. Laid-back and intimate groove with organic feel. Simple intro leading into a gentle main section with a quiet breakdown. Warm, close-mic recording feel with natural room ambience. Purely instrumental, no vocals of any kind.`;
   } else if(energy>0.6) {
-    genre='indie rock, alternative rock';
-    instruments='electric guitar, bass guitar, drums, organ, synth';
-    lyricsInstruments='electric guitar, bass, drums, organ';
+    prompt = `Indie rock track at ${bpm} BPM, ${mood}, driven by punchy electric guitar, solid bass guitar, tight drums and warm organ. Driving and energetic groove. Clear intro, building core section and strong finish. Live recording feel with a balanced, modern mix. Purely instrumental, no vocals of any kind.`;
   } else {
-    genre='ambient pop, cinematic';
-    instruments='grand piano, synth pads, acoustic guitar, soft percussion, strings';
-    lyricsInstruments='piano, synth, guitar, strings';
+    prompt = `Cinematic ambient pop track at ${bpm} BPM, ${mood}, woven from lush grand piano, airy synth pads, gentle acoustic guitar and soft brushed percussion. Subtle and atmospheric groove with space and breathing room. Floating intro expanding into a warm core section. Polished, spacious mix with natural reverb. Purely instrumental, no vocals of any kind.`;
   }
-  const mood = valence>0.6?'uplifting, euphoric':valence<0.3?'melancholic, brooding':'reflective, atmospheric';
-  const tempo = bpm>130?'uptempo':bpm<90?'slow tempo':'mid tempo';
-  const tags = `instrumental, ${genre}, ${instruments}, ${mood}, ${tempo}, ${Math.round(bpm)} bpm, studio production, high fidelity`;
-  return { tags, lyrics:lyricsInstruments, description:`${styleMode} instrumental of ${track.name}` };
+  return { tags:`${prompt.split(',')[0].toLowerCase()}`, prompt, lyrics:'[inst]', description:`${styleMode} instrumental of ${track.name}` };
 }
 
 // ============================================================
@@ -614,13 +621,13 @@ async function runAceStep(prompt, durationSec) {
     body: JSON.stringify({
       version: '280fc4f9ee507577f880a167f639c02622421d8fecf492454320311217b688f1',
       input: {
-        tags:                prompt.tags,
-        lyrics:              prompt.lyrics,
+        tags:                prompt.prompt || prompt.tags,
+        lyrics:              '[inst]',
         duration:            durationSec,
-        guidance_scale:      9.0,
-        num_inference_steps: 100,
-        scheduler:           'euler',
+        guidance_scale:      7.0,
+        num_inference_steps: 60,
         seed:                Math.floor(Math.random() * 2147483647),
+        output_format:       'wav',
       }
     })
   });
@@ -798,12 +805,11 @@ async function startGeneration() {
       log(`[${track.name}] Prompt genereren...`);
 
       const prompt = await generatePrompt(track, features, styleMode, creativity);
-      log(`[${track.name}] Tags: ${prompt.tags.substring(0,55)}...`, 'success');
+      log(`[${track.name}] ${prompt.tags}`, 'success');
 
       const promptArea = document.getElementById(`prompt-area-${index}`);
       promptArea.classList.add('visible');
-      document.getElementById(`prompt-text-${index}`).textContent =
-        `🎵 ${prompt.tags}${prompt.lyrics ? ` · ✍ "${prompt.lyrics.split('\n')[0].substring(0,40)}..."` : ''}`;
+      document.getElementById(`prompt-text-${index}`).textContent = `🎵 ${(prompt.prompt||prompt.tags).substring(0,160)}`;
 
       const metaEl = card.querySelector('.track-meta');
       if(metaEl && prompt.tags) {
