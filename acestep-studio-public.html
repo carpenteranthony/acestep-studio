@@ -118,8 +118,6 @@ select:focus{border-color:var(--accent)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .model-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 6px 0 4px; color: var(--text-dim); }
 .ace-label { color: #7c6fff; }
-.lyria-label { color: #34c98a; margin-top: 12px; }
-.lyria-section { margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; }
 .variation-error{font-size:10px;color:var(--red);padding:6px 0}
 .progress-bar-wrap{height:2px;background:var(--border);overflow:hidden;display:none;margin:0 28px 2px}
 .progress-bar-wrap.visible{display:block}
@@ -248,17 +246,6 @@ https://open.spotify.com/playlist/..."></textarea>
         <div class="field-hint">Maak een app op <a href="https://developer.spotify.com/dashboard" target="_blank">developer.spotify.com/dashboard</a><br>
         Redirect URI instellen: jouw GitHub Pages URL</div>
       </div>
-      <div class="field-group">
-        <div class="field-label">Replicate API Key <span class="badge-req">vereist</span></div>
-        <input class="field-input" id="cfgReplicateKey" type="password" placeholder="r8_...">
-        <div class="field-hint"><a href="https://replicate.com/account/api-tokens" target="_blank">replicate.com</a> → Account → API tokens · ~€0,02–0,04 per track</div>
-      </div>
-      <div class="field-group">
-        <div class="field-label">Anthropic API Key <span class="badge-opt">optioneel</span></div>
-        <input class="field-input" id="cfgAnthropicKey" type="password" placeholder="sk-ant-...">
-        <div class="field-hint"><a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → voor rijke muzikale prompts</div>
-      </div>
-    </div>
     <div class="modal-footer">
       <div class="save-msg" id="saveMsg"></div>
       <button class="btn-save" onclick="saveSettings()">OPSLAAN</button>
@@ -268,15 +255,13 @@ https://open.spotify.com/playlist/..."></textarea>
 
 <script>
 // ============================================================
-// CONFIG — ingebakken credentials
+// CONFIG
 // ============================================================
-// Credentials worden opgeslagen in localStorage — nooit hardcoded
+// Spotify Client ID kan lokaal worden overschreven; verder geen client keys in deze file
 function loadCFG() {
   return {
-    spotifyClientId: 'd5654e9048a34f4887b5cd72a8c9ed1b', // altijd vast, localStorage wordt genegeerd
-    replicateKey:    localStorage.getItem('cfg_replicate_key')      || '',
-    anthropicKey:    localStorage.getItem('cfg_anthropic_key')      || '',
-    redirectUri:     'https://carpenteranthony.github.io/acestep-studio/acestep-studio-public.html',
+    spotifyClientId: localStorage.getItem('cfg_spotify_client_id') || 'd5654e9048a34f4887b5cd72a8c9ed1b',
+    redirectUri: 'https://carpenteranthony.github.io/acestep-studio/acestep-studio-public.html',
   };
 }
 // CFG als proxy zodat bestaande code gewoon werkt
@@ -588,26 +573,32 @@ async function generatePrompt(track, features, styleMode, creativity, spotifyGen
 
 
 function fallbackPrompt(track, features, styleMode) {
-  const bpm     = features ? Math.round(features.tempo) : 120;
-  const energy  = features ? features.energy   : 0.5;
-  const valence = features ? features.valence  : 0.5;
-  const dance   = features ? features.danceability : 0.5;
-  const acoustic= features ? features.acousticness : 0.3;
-  const mood = valence>0.6?'uplifting and euphoric':valence<0.3?'melancholic and introspective':'reflective and atmospheric';
-  const tempo = bpm>130?'uptempo':bpm<90?'slow-tempo':'mid-tempo';
-  let prompt;
-  if(dance>0.8 && bpm>115) {
+  const bpm      = features ? Math.round(features.tempo) : 120;
+  const energy   = features ? features.energy : 0.5;
+  const valence  = features ? features.valence : 0.5;
+  const dance    = features ? features.danceability : 0.5;
+  const acoustic = features ? features.acousticness : 0.3;
+  const mood = valence > 0.6 ? 'uplifting' : valence < 0.3 ? 'melancholic' : 'reflective';
+
+  let prompt, tags;
+  if (dance > 0.8 && bpm > 115) {
     prompt = `Upbeat latin pop track at ${bpm} BPM, high energy, driven by warm fingerpicked nylon guitar, punchy congas, timbales, fat bass guitar and bright brass stabs. Groove-driven and danceable with a syncopated latin rhythm. Clear intro, energetic core, short breakdown and strong outro. Live band feel, warm and lush production mix. Purely instrumental, no vocals of any kind.`;
-  } else if(energy>0.75 && bpm>122) {
+    tags = `latin pop, tropical pop, nylon guitar, congas, timbales, bass guitar, brass stabs, syncopated latin groove, ${mood}, ${bpm} bpm, polished mix, no vocals, instrumental`;
+  } else if (energy > 0.75 && bpm > 122) {
     prompt = `Deep house track at ${bpm} BPM, high energy, built around a punchy four-on-the-floor kick, analog synth bass, lush rhodes piano chords and shimmering string pads. Hypnotic and groove-driven with subtle percussion details. Intro builds gradually into a full drop, then breaks down and rebuilds. Club-ready production with a crisp, modern mix. Purely instrumental, no vocals of any kind.`;
-  } else if(acoustic>0.6) {
+    tags = `deep house, melodic house, four-on-the-floor kick, analog synth bass, rhodes chords, string pads, subtle percussion, hypnotic groove, ${mood}, ${bpm} bpm, club-ready mix, no vocals, instrumental`;
+  } else if (acoustic > 0.6) {
     prompt = `Indie folk track at ${bpm} BPM, ${mood}, centered on warm fingerpicked acoustic guitar, tender upright piano, soft upright bass and brushed snare drums. Laid-back and intimate groove with organic feel. Simple intro leading into a gentle main section with a quiet breakdown. Warm, close-mic recording feel with natural room ambience. Purely instrumental, no vocals of any kind.`;
-  } else if(energy>0.6) {
+    tags = `indie folk, acoustic folk, fingerpicked acoustic guitar, upright piano, upright bass, brushed snare, intimate organic groove, ${mood}, ${bpm} bpm, warm close-mic mix, no vocals, instrumental`;
+  } else if (energy > 0.6) {
     prompt = `Indie rock track at ${bpm} BPM, ${mood}, driven by punchy electric guitar, solid bass guitar, tight drums and warm organ. Driving and energetic groove. Clear intro, building core section and strong finish. Live recording feel with a balanced, modern mix. Purely instrumental, no vocals of any kind.`;
+    tags = `indie rock, alt rock, punchy electric guitar, bass guitar, tight drums, warm organ, driving groove, ${mood}, ${bpm} bpm, balanced live-band mix, no vocals, instrumental`;
   } else {
     prompt = `Cinematic ambient pop track at ${bpm} BPM, ${mood}, woven from lush grand piano, airy synth pads, gentle acoustic guitar and soft brushed percussion. Subtle and atmospheric groove with space and breathing room. Floating intro expanding into a warm core section. Polished, spacious mix with natural reverb. Purely instrumental, no vocals of any kind.`;
+    tags = `cinematic ambient pop, grand piano, airy synth pads, gentle acoustic guitar, brushed percussion, atmospheric groove, spacious reverb, ${mood}, ${bpm} bpm, polished mix, no vocals, instrumental`;
   }
-  return { tags:`${prompt.split(',')[0].toLowerCase()}`, prompt, lyrics:'[inst]', description:`${styleMode} instrumental of ${track.name}` };
+
+  return { tags, prompt, lyrics: '[inst]', description: `${styleMode} instrumental of ${track.name}` };
 }
 
 // ============================================================
@@ -619,7 +610,7 @@ async function runAceStep(prompt, durationSec) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       tags:     prompt.tags,
-      lyrics:   '[inst]',
+      lyrics:   prompt.lyrics || '[inst]',
       duration: durationSec,
       seed:     Math.floor(Math.random() * 2147483647),
     })
@@ -722,20 +713,32 @@ function setVariation(gridId, varIndex, status, audioUrl, errorMsg) {
     row.innerHTML = `<div class="variation-label">${label}</div><div class="variation-audio" id="var-audio-${gridId}-${varIndex}"></div>`;
     document.getElementById(gridId).appendChild(row);
   }
+
   const audioArea = document.getElementById(`var-audio-${gridId}-${varIndex}`);
+  const oldTimer = audioArea.dataset.timer;
+  if(oldTimer) {
+    clearInterval(Number(oldTimer));
+    delete audioArea.dataset.timer;
+  }
+  row.querySelectorAll('.btn-dl').forEach(el => el.remove());
+
   if(status==='generating') {
     const startTime = Date.now();
     const timerInterval = setInterval(() => {
       const elapsed = Math.round((Date.now() - startTime) / 1000);
-      const el = document.getElementById('gen-timer-' + gridId + '-' + varIndex);
+      const el = document.getElementById(`gen-timer-${gridId}-${varIndex}`);
       if(el) el.textContent = elapsed + 's';
     }, 1000);
-    audioArea.dataset.timer = timerInterval;
+    audioArea.dataset.timer = String(timerInterval);
     audioArea.innerHTML = `<div class="variation-generating"><div class="spinner"></div>GENEREREN... <span id="gen-timer-${gridId}-${varIndex}">0s</span></div>`;
   } else if(status==='done' && audioUrl) {
     audioArea.innerHTML = `<audio controls src="${audioUrl}"></audio>`;
     const dl = document.createElement('a');
-    dl.className='btn-dl'; dl.href=audioUrl; dl.download=`${label.replace(' ','_').toLowerCase()}.wav`; dl.target='_blank'; dl.textContent='↓';
+    dl.className='btn-dl';
+    dl.href=audioUrl;
+    dl.download=`${label.replace(' ','_').toLowerCase()}.wav`;
+    dl.target='_blank';
+    dl.textContent='↓';
     row.appendChild(dl);
   } else if(status==='error') {
     audioArea.innerHTML = `<div class="variation-error">✕ ${errorMsg||'Mislukt'}</div>`;
@@ -764,15 +767,16 @@ async function startGeneration() {
 
   isRunning = true;
   const btn = document.getElementById('launchBtn');
-  btn.disabled = true; btn.textContent = 'BEZIG...';
+  btn.disabled = true;
+  btn.textContent = 'BEZIG...';
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('tracksContainer').style.display = 'block';
   document.getElementById('tracksContainer').innerHTML = '';
   document.getElementById('logConsole').innerHTML = '';
 
-  const variations = parseInt(document.getElementById('variationsCount').value);
-  const duration   = parseInt(document.getElementById('durationSec').value);
-  const creativity = parseInt(document.getElementById('creativitySlider').value);
+  const variations = parseInt(document.getElementById('variationsCount').value, 10);
+  const duration   = parseInt(document.getElementById('durationSec').value, 10);
+  const creativity = parseInt(document.getElementById('creativitySlider').value, 10);
   const styleMode  = document.getElementById('styleMode').value;
 
   try {
@@ -780,12 +784,11 @@ async function startGeneration() {
     const tracks = await fetchSpotifyTracks(parsed);
     log(`✓ ${tracks.length} track(s) gevonden`, 'success');
 
-    const ids      = tracks.map(t=>t.id).filter(Boolean);
-    const featMap  = ids.length ? await fetchAudioFeatures(ids) : {};
+    const ids = tracks.map(t => t.id).filter(Boolean);
+    const featMap = ids.length ? await fetchAudioFeatures(ids) : {};
 
-    // Fetch Spotify genres per artist for better Claude prompts
     const artistIdSet = new Set();
-    tracks.forEach(t => (t.artists||[]).forEach(a => { if(a.id) artistIdSet.add(a.id); }));
+    tracks.forEach(t => (t.artists || []).forEach(a => { if(a.id) artistIdSet.add(a.id); }));
     const spotifyGenres = await fetchArtistGenres([...artistIdSet]);
     log(`✓ Spotify genres: ${spotifyGenres.join(', ') || 'geen'}`, 'success');
 
@@ -795,92 +798,72 @@ async function startGeneration() {
     hdr.innerHTML = `<div class="tracks-title">${parsed.type.toUpperCase()}</div><div class="tracks-count">${tracks.length} track${tracks.length!==1?'s':''} · ${variations} variaties</div>`;
     container.appendChild(hdr);
 
-    const cards = tracks.map((t,i) => {
-      const feat = featMap[t.id]||null;
+    const cards = tracks.map((t, i) => {
+      const feat = featMap[t.id] || null;
       const card = createTrackCard(t, feat, i);
       container.appendChild(card);
-      return { track:t, features:feat, card, index:i };
+      return { track: t, features: feat, card, index: i };
     });
 
-    const total = tracks.length * variations * 2; // ACE + Lyria
+    const total = tracks.length * variations;
     let done = 0;
     setProgress(0, total);
 
-    for(const { track, features, card, index } of cards) {
-      card.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    for (const { track, features, card, index } of cards) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       setTrackStatus(card, 'status-analyzing', 'ANALYSE');
       log(`[${track.name}] Prompt genereren...`);
 
-      const trackArtistIds = (track.artists||[]).map(a=>a.id).filter(Boolean);
+      const trackArtistIds = (track.artists || []).map(a => a.id).filter(Boolean);
       const trackGenres = await fetchArtistGenres(trackArtistIds);
-      const prompt = await generatePrompt(track, features, styleMode, creativity, trackGenres);
+      const prompt = await generatePrompt(track, features, styleMode, creativity, trackGenres.length ? trackGenres : spotifyGenres);
       log(`[${track.name}] ${prompt.tags}`, 'success');
 
       const promptArea = document.getElementById(`prompt-area-${index}`);
       promptArea.classList.add('visible');
-      document.getElementById(`prompt-text-${index}`).textContent = `🎵 ${(prompt.prompt||prompt.tags).substring(0,160)}`;
+      document.getElementById(`prompt-text-${index}`).textContent = `🎵 ${(prompt.prompt || prompt.tags).substring(0, 220)}`;
 
       const metaEl = card.querySelector('.track-meta');
       if(metaEl && prompt.tags) {
         const tag = document.createElement('span');
-        tag.className='track-tag tag-genre';
+        tag.className = 'track-tag tag-genre';
         tag.textContent = prompt.tags.split(',')[0].trim();
         metaEl.appendChild(tag);
       }
 
       setTrackStatus(card, 'status-generating', 'GENEREERT');
-      const aceGridId = `variations-grid-${index}`;
-      const lyriaGridId = `lyria-grid-${index}`;
+      const gridId = `variations-grid-${index}`;
+      const grid = document.getElementById(gridId);
+      const existingLabel = card.querySelector('.model-label.ace-label');
+      if(!existingLabel) {
+        const aceLabel = document.createElement('div');
+        aceLabel.className = 'model-label ace-label';
+        aceLabel.textContent = '⚡ ACE-STEP 1.5';
+        grid.before(aceLabel);
+      }
 
-      // Add Lyria section to card
-      const lyriaSection = document.createElement('div');
-      lyriaSection.className = 'lyria-section';
-      lyriaSection.innerHTML = '<div class="model-label lyria-label">🎵 LYRIA 3 PRO</div><div class="variations-grid" id="' + lyriaGridId + '"></div>';
-      const aceSection = card.querySelector('.variations-grid').parentElement || card;
-      const aceLabel = document.createElement('div');
-      aceLabel.className = 'model-label ace-label';
-      aceLabel.textContent = '⚡ ACE-STEP 1.5';
-      card.querySelector('.variations-grid').before(aceLabel);
-      card.appendChild(lyriaSection);
-
-      // Run ACE-Step variations
-      log('[' + track.name + '] ACE-Step variaties starten...');
-      for(let v=0; v<variations; v++) {
+      for (let v = 0; v < variations; v++) {
         if(v > 0) await sleep(12000);
-        setVariation(aceGridId, v, 'generating');
+        setVariation(gridId, v, 'generating');
         try {
           const url = await runAceStep(prompt, duration);
-          setVariation(aceGridId, v, 'done', url);
-          log('[' + track.name + '] ✓ ACE ' + (v+1) + ' klaar', 'success');
+          setVariation(gridId, v, 'done', url);
+          log(`[${track.name}] ✓ ACE ${v + 1} klaar`, 'success');
         } catch(e) {
           if(e.message.includes('throttled') || e.message.includes('rate limit')) {
             await sleep(15000);
             try {
               const url = await runAceStep(prompt, duration);
-              setVariation(aceGridId, v, 'done', url);
+              setVariation(gridId, v, 'done', url);
+              log(`[${track.name}] ✓ ACE ${v + 1} klaar na retry`, 'success');
             } catch(e2) {
-              setVariation(aceGridId, v, 'error', null, e2.message);
+              setVariation(gridId, v, 'error', null, e2.message);
+              log(`[${track.name}] ✗ ACE ${v + 1}: ${e2.message}`, 'error');
             }
           } else {
-            setVariation(aceGridId, v, 'error', null, e.message);
+            setVariation(gridId, v, 'error', null, e.message);
+            log(`[${track.name}] ✗ ACE ${v + 1}: ${e.message}`, 'error');
           }
-        }
-        done++;
-        setProgress(done, total);
-      }
-
-      // Run Lyria 3 Pro variations
-      log('[' + track.name + '] Lyria 3 Pro variaties starten...');
-      for(let v=0; v<variations; v++) {
-        if(v > 0) await sleep(5000);
-        setVariation(lyriaGridId, v, 'generating');
-        try {
-          const url = await runLyria(prompt, duration);
-          setVariation(lyriaGridId, v, 'done', url);
-          log('[' + track.name + '] ✓ Lyria ' + (v+1) + ' klaar', 'success');
-        } catch(e) {
-          setVariation(lyriaGridId, v, 'error', null, e.message);
-          log('[' + track.name + '] ✗ Lyria ' + (v+1) + ': ' + e.message, 'error');
         }
         done++;
         setProgress(done, total);
@@ -894,7 +877,8 @@ async function startGeneration() {
     alert(`Fout: ${e.message}`);
   } finally {
     isRunning = false;
-    btn.disabled = false; btn.textContent = 'GENEREER MUZIEK';
+    btn.disabled = false;
+    btn.textContent = 'GENEREER MUZIEK';
   }
 }
 
@@ -904,8 +888,6 @@ async function startGeneration() {
 // ============================================================
 function openSettings() {
   document.getElementById('cfgSpotifyId').value    = localStorage.getItem('cfg_spotify_client_id') || '';
-  document.getElementById('cfgReplicateKey').value = localStorage.getItem('cfg_replicate_key')      || '';
-  document.getElementById('cfgAnthropicKey').value = localStorage.getItem('cfg_anthropic_key')      || '';
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings() {
@@ -913,11 +895,7 @@ function closeSettings() {
 }
 function saveSettings() {
   const sid = document.getElementById('cfgSpotifyId').value.trim();
-  const rk  = document.getElementById('cfgReplicateKey').value.trim();
-  const ak  = document.getElementById('cfgAnthropicKey').value.trim();
   if(sid) localStorage.setItem('cfg_spotify_client_id', sid);
-  if(rk)  localStorage.setItem('cfg_replicate_key', rk);
-  if(ak)  localStorage.setItem('cfg_anthropic_key', ak);
   const msg = document.getElementById('saveMsg');
   msg.textContent = '✓ Opgeslagen';
   setTimeout(() => { msg.textContent = ''; closeSettings(); }, 1000);
@@ -928,8 +906,7 @@ document.addEventListener('click', e => {
 
 function checkSettingsOnLoad() {
   const sid = localStorage.getItem('cfg_spotify_client_id');
-  const rk  = localStorage.getItem('cfg_replicate_key');
-  if(!sid || !rk) setTimeout(openSettings, 500);
+  if(!sid) setTimeout(openSettings, 500);
 }
 
 // ============================================================
@@ -969,29 +946,3 @@ async function handleCallback() {
 </script>
 </body>
 </html>
-async function runLyria(prompt, durationSec) {
-  // Lyria uses a descriptive text prompt, not comma-separated tags
-  const lyriaPrompt = prompt.description
-    ? prompt.tags + '. ' + prompt.description
-    : prompt.tags;
-
-  const startResp = await fetch('https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/google/google-lyria-3-pro-music', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      prompt: lyriaPrompt,
-      duration: Math.min(durationSec, 30)  // Lyria max is 30s
-    })
-  });
-  if(!startResp.ok) {
-    const e = await startResp.json().catch(() => ({}));
-    throw new Error('Lyria start mislukt: ' + (e.message || e.detail || startResp.status));
-  }
-  const startData = await startResp.json();
-  const requestId = startData.data?.id || startData.id;
-  if(!requestId) throw new Error('Geen request ID van Lyria');
-
-  return await pollResult(requestId);
-}
-
-
