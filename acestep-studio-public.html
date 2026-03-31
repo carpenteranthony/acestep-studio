@@ -601,7 +601,8 @@ Respond ONLY with valid JSON:
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:800,
+        max_tokens:400,
+        system: 'You are a music tag generator. You ONLY output valid JSON. Never explain, never ask questions. Output JSON immediately.',
         messages:[{ role:'user', content:msg }]
       })
     });
