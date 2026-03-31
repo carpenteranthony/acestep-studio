@@ -543,40 +543,34 @@ async function generatePrompt(track, features, styleMode, creativity) {
   notGenres.push('jazz', 'jazz fusion', 'hard rock', 'classic rock');
   const avoidStr = notGenres.join(', ');
 
-  const msg = `You are a world-class music producer writing ACE-Step prompts. Your job is maximum genre accuracy and instrument realism.
+  const msg = `You are a world-class music producer writing ACE-Step music generation prompts.
 
-Track: "\${track.name}" by \${artists}
-BPM: \${bpm} | Key: \${key} | Energy: \${energyWord} (\${energy.toFixed(2)}) | Danceability: \${dance.toFixed(2)} | Acousticness: \${acoustic.toFixed(2)} | Valence: \${valence.toFixed(2)}
-Style: \${styleNote}
+STEP 1 — Identify the genre from the ARTIST NAME first, not from the numbers.
+Artist: \${artists}
+Track: "\${track.name}"
 
-Use your knowledge of "\${artists}" to identify the EXACT genre and sound. Be ruthlessly specific.
+What genre is \${artists} ACTUALLY known for? Base your answer on your real knowledge of this artist.
+Examples: RAYE → disco-soul-R&B (NOT reggaeton). Taylor Swift → indie pop/country pop (NOT EDM). Shakira → latin pop (NOT rock). Ofenbach → French house/electronic.
 
-Output TWO things:
+STEP 2 — Use the audio features to refine (BPM, energy, feel):
+BPM: \${bpm} | Energy: \${energyWord} | Danceability: \${dance.toFixed(2)} | Acousticness: \${acoustic.toFixed(2)}
+Style directive: \${styleNote}
 
-1. TAGS (comma-separated, 10-14 items) — these directly control ACE-Step's genre understanding:
-   - Start with the most specific genre possible (e.g. "reggaeton", "tropical house", "dream pop", NOT just "pop")
-   - Add 4-5 instruments with ONE adjective each (e.g. "nylon guitar", "808 bass", "brushed snare")
-   - Add tempo feel, mood, production style
-   - Add "no jazz", "no rock", "no metal", "no acoustic folk" if not fitting
-   - This is the PRIMARY steering signal — get the genre right here first
+STEP 3 — Write TAGS for ACE-Step (comma-separated, 10-14 items):
+- First item: the CORRECT genre for this artist (from Step 1)
+- Then: 4-5 instruments with one adjective each that match this genre
+- Then: groove type, mood, BPM, production style
+- These tags go DIRECTLY into the AI music model — genre accuracy is everything
 
-2. PROMPT (2-3 sentences) — detailed description for quality:
-   - Confirm and expand on the tags
-   - Describe instrument timbre: attack, texture, space (e.g. "close-mic'd", "roomy", "dry")
-   - Describe groove and mix character
-   - End with: "Purely instrumental, no vocals."
-   - DO NOT contradict the tags
+STEP 4 — No vocals. Always add "no vocals" and "[inst]".
 
-CRITICAL: Avoid these unless genuinely fitting this artist: \${avoidStr}
-If this artist makes electronic music, say so. If latin pop, say so. If indie folk, say so. Do NOT default to jazz or rock.
+Avoid these for this track: \${avoidStr}
 
-CRITICAL: The "tags" field goes DIRECTLY into ACE-Step as the music prompt. It must be comma-separated descriptors only — no sentences, no periods. Format: genre, subgenre, instruments with adjectives, groove, mood, tempo, mix style. Example: "latin pop, champeta, nylon guitar, congas, 808 bass, brass section, danceable, uplifting, 129 bpm, live band feel, punchy mix"
-
-Respond ONLY with valid JSON, no markdown:
+Respond ONLY with valid JSON, no markdown, no explanation:
 {
-  "tags": "genre, subgenre, instrument with adjective, instrument with adjective, instrument with adjective, groove type, mood, bpm, production style",
+  "tags": "correct genre, subgenre, instrument+adjective, instrument+adjective, instrument+adjective, instrument+adjective, groove, mood, \${bpm} bpm, production style, no vocals",
   "lyrics": "[inst]",
-  "description": "genre: X, key instruments: Y"
+  "description": "one line: genre and key instruments"
 }`;
 
   try {
