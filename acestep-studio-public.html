@@ -533,42 +533,49 @@ async function generatePrompt(track, features, styleMode, creativity) {
   const mixFeel = acoustic>0.6?'warm organic feel, live band recording':energy>0.7?'punchy, modern club mix':'clean, polished production';
   const structureHint = durationSec>60?'with clear intro, build, drop, breakdown and outro':'loopable with clear hook';
 
-  const msg = `You are a world-class music producer and sound designer specializing in high-fidelity AI music prompts.
+  // Derive what this genre is NOT to prevent ACE-Step drift
+  const notGenres = [];
+  if(acoustic < 0.4 && energy > 0.5) notGenres.push('acoustic folk', 'singer-songwriter');
+  if(dance < 0.5 || bpm < 100) notGenres.push('EDM', 'techno', 'hardstyle');
+  if(energy < 0.6) notGenres.push('hard rock', 'metal', 'punk');
+  if(acoustic > 0.5) notGenres.push('trap', 'drill', 'dubstep');
+  // Always exclude jazz and rock unless truly fitting
+  notGenres.push('jazz', 'jazz fusion', 'hard rock', 'classic rock');
+  const avoidStr = notGenres.join(', ');
 
-Generate a prompt for ACE-Step that maximizes INSTRUMENT QUALITY and REALISM. The output must be purely instrumental — zero vocals.
+  const msg = `You are a world-class music producer writing ACE-Step prompts. Your job is maximum genre accuracy and instrument realism.
 
-Track: "${track.name}" by ${artists}
-BPM: ${bpm} | Key: ${key} | Energy: ${energyWord} (${energy.toFixed(2)}) | Danceability: ${dance.toFixed(2)} | Acousticness: ${acoustic.toFixed(2)}
-Style directive: ${styleNote}
+Track: "\${track.name}" by \${artists}
+BPM: \${bpm} | Key: \${key} | Energy: \${energyWord} (\${energy.toFixed(2)}) | Danceability: \${dance.toFixed(2)} | Acousticness: \${acoustic.toFixed(2)} | Valence: \${valence.toFixed(2)}
+Style: \${styleNote}
 
-Use your knowledge of "${artists}" and "${track.name}" to write a musically accurate, high-fidelity prompt.
+Use your knowledge of "\${artists}" to identify the EXACT genre and sound. Be ruthlessly specific.
 
-Write ONE paragraph (3-5 sentences) covering:
-1. GENRE + ERA — be very specific (e.g. "late 90s latin pop" not "pop")
-2. INSTRUMENTS — name 4-6 instruments with rich timbral descriptors:
-   - Attack/texture: "plucked", "bowed", "fingerpicked", "hammered", "breathy", "punchy", "warm", "bright", "dark", "crisp"
-   - Space: "close-mic'd", "roomy", "dry", "with natural reverb", "intimate"
-   - Quality: "studio-grade", "vintage", "modern", "analog", "live"
-   Examples: "warm fingerpicked nylon guitar with natural room tone", "punchy vintage congas with short decay", "deep analog bass with smooth attack"
-3. GROOVE — rhythm feel: four-on-the-floor / syncopated / swing / driving / laid-back / bouncy
-4. STRUCTURE — clear sections: intro / build / main / breakdown / outro
-5. MIX — production character: "clean polished mix", "warm analog mix", "punchy modern mix", "open and airy", "dense and layered"
-6. End with: "Purely instrumental, no vocals whatsoever."
+Output TWO things:
 
-Rules:
-- Never use vague words: "nice", "beautiful", "amazing", "rich"
-- Every instrument must have at least 2 descriptors
-- Avoid generic AI clichés: "lush orchestral", "ethereal", "cinematic" unless truly fitting
-- Be technically specific — a music producer should recognize exactly what this track sounds like from the prompt alone
+1. TAGS (comma-separated, 10-14 items) — these directly control ACE-Step's genre understanding:
+   - Start with the most specific genre possible (e.g. "reggaeton", "tropical house", "dream pop", NOT just "pop")
+   - Add 4-5 instruments with ONE adjective each (e.g. "nylon guitar", "808 bass", "brushed snare")
+   - Add tempo feel, mood, production style
+   - Add "no jazz", "no rock", "no metal", "no acoustic folk" if not fitting
+   - This is the PRIMARY steering signal — get the genre right here first
 
-Also write short display_tags (5-7 words) for the UI.
+2. PROMPT (2-3 sentences) — detailed description for quality:
+   - Confirm and expand on the tags
+   - Describe instrument timbre: attack, texture, space (e.g. "close-mic'd", "roomy", "dry")
+   - Describe groove and mix character
+   - End with: "Purely instrumental, no vocals."
+   - DO NOT contradict the tags
+
+CRITICAL: Avoid these unless genuinely fitting this artist: \${avoidStr}
+If this artist makes electronic music, say so. If latin pop, say so. If indie folk, say so. Do NOT default to jazz or rock.
 
 Respond ONLY with valid JSON, no markdown:
 {
-  "tags": "genre + 2 key instruments + mood (5-7 words)",
-  "prompt": "the full high-fidelity 3-5 sentence ACE-Step prompt",
+  "tags": "specific genre, subgenre, instrument1, instrument2, instrument3, instrument4, tempo feel, mood, production, no jazz, no rock",
+  "prompt": "2-3 sentence high-fidelity description matching the tags exactly",
   "lyrics": "[inst]",
-  "description": "one sentence note"
+  "description": "genre: X, key instruments: Y"
 }`;
 
   try {
@@ -615,50 +622,43 @@ function fallbackPrompt(track, features, styleMode) {
 }
 
 // ============================================================
-// REPLICATE ACE-STEP
+// WAVESPEED ACE-STEP v1.5
 // ============================================================
 async function runAceStep(prompt, durationSec) {
-  const startResp = await fetch('https://replicate-proxy.anthony-3ce.workers.dev/proxy/v1/predictions', {
+  const startResp = await fetch('https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/wavespeed-ai/ace-step-1.5', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Prefer':       'respond-async',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      version: '280fc4f9ee507577f880a167f639c02622421d8fecf492454320311217b688f1',
-      input: {
-        tags:                prompt.prompt || prompt.tags,
-        lyrics:              '[inst]',
-        duration:            durationSec,
-        guidance_scale:      7.5,
-        num_inference_steps: 100,
-        seed:                Math.floor(Math.random() * 2147483647),
-      }
+      prompt:   prompt.prompt || prompt.tags,
+      lyrics:   '[inst]',
+      duration: durationSec,
+      seed:     Math.floor(Math.random() * 2147483647),
     })
   });
 
   if(!startResp.ok) {
     const e = await startResp.json().catch(() => ({}));
-    throw new Error(`Replicate start mislukt: ${e.detail || startResp.status}`);
+    throw new Error(`WaveSpeed start mislukt: ${e.message || e.detail || startResp.status}`);
   }
 
-  const pred    = await startResp.json();
-  const pollUrl = pred.urls?.get || `https://api.replicate.com/v1/predictions/${pred.id}`;
+  const data = await startResp.json();
+  const requestId = data.data?.id || data.id;
+  if(!requestId) throw new Error('Geen request ID van WaveSpeed');
 
   for(let i = 0; i < 120; i++) {
     await sleep(3000);
-    const proxyPollUrl = pollUrl.replace('https://api.replicate.com', 'https://replicate-proxy.anthony-3ce.workers.dev/proxy');
-    const pr = await fetch(proxyPollUrl);
+    const pr = await fetch(`https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/predictions/${requestId}/result`);
     if(!pr.ok) continue;
     const result = await pr.json();
-    if(result.status === 'succeeded') {
-      const out = result.output;
-      if(Array.isArray(out)) return out[0];
-      if(typeof out === 'string') return out;
-      throw new Error('Onbekend output formaat');
+    const status = result.data?.status || result.status;
+    if(status === 'completed' || status === 'succeeded') {
+      const outputs = result.data?.outputs || result.outputs || [];
+      if(outputs.length > 0) return outputs[0];
+      const url = result.data?.url || result.url;
+      if(url) return url;
+      throw new Error('Geen audio URL in response');
     }
-    if(result.status === 'failed')   throw new Error(`ACE-Step fout: ${result.error || 'onbekend'}`);
-    if(result.status === 'canceled') throw new Error('Geannuleerd');
+    if(status === 'failed') throw new Error(`WaveSpeed fout: ${result.data?.error || result.error || 'onbekend'}`);
   }
   throw new Error('Timeout na 6 minuten');
 }
