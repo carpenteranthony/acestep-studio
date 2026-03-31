@@ -536,64 +536,28 @@ async function generatePrompt(track, features, styleMode, creativity, spotifyGen
   const dance     = features ? features.danceability : 0.5;
   const genreStr  = spotifyGenres.join(', ');
   const acoustic  = features ? features.acousticness : 0.3;
-  const instrness = features ? features.instrumentalness : 0.1;
-
+  const energyWord = energy>0.75?'high energy':energy>0.45?'medium energy':'low energy';
   const styleNote = {
     faithful:  'Closely mimic the style and feel of the original.',
     inspired:  'Take inspiration but add creative reinterpretation.',
     reimagined:'Radically reimagine in a completely different style.'
   }[styleMode];
 
-  const creativeNote = creativity>=8?'Be highly experimental.':creativity>=5?'Balance creativity with accessibility.':'Keep it grounded and familiar.';
-
-  // Build energy/groove/mix descriptors from audio features
-
-  const energyWord = energy>0.75?'high energy':energy>0.45?'medium energy':'low energy';
-  const grooveType = dance>0.75?'highly danceable, groove-driven':dance>0.45?'steady groove':'subtle, laid-back';
-  const mixFeel = acoustic>0.6?'warm organic feel, live band recording':energy>0.7?'punchy, modern club mix':'clean, polished production';
-  const structureHint = durationSec>60?'with clear intro, build, drop, breakdown and outro':'loopable with clear hook';
-
-  // Derive what this genre is NOT to prevent ACE-Step drift
-  const notGenres = [];
-  if(acoustic < 0.4 && energy > 0.5) notGenres.push('acoustic folk', 'singer-songwriter');
-  if(dance < 0.5 || bpm < 100) notGenres.push('EDM', 'techno', 'hardstyle');
-  if(energy < 0.6) notGenres.push('hard rock', 'metal', 'punk');
-  if(acoustic > 0.5) notGenres.push('trap', 'drill', 'dubstep');
-  // Always exclude jazz and rock unless truly fitting
-  notGenres.push('jazz', 'jazz fusion', 'hard rock', 'classic rock');
-  const avoidStr = notGenres.join(', ');
-
-  const msg = `You are an expert music producer. Generate ACE-Step tags for this track.
-
-Artist: \${artists}
-Track: "\${track.name}"
-BPM: \${bpm} | Energy: \${energyWord} | Style: \${styleNote}
-
-Your ONLY job: identify the correct genre for \${artists} and output comma-separated tags.
-
-ARTIST GENRE RULES (memorize these, do not deviate):
-- RAYE = disco funk soul R&B (NOT indie pop, NOT reggaeton)
-- Taylor Swift = indie pop country pop (NOT EDM, NOT reggaeton)  
-- Shakira = latin pop reggaeton (NOT disco)
-- Ofenbach = french house electronic
-- Disney = orchestral cinematic pop
-- If unknown artist: use BPM + energy to guess genre
-
-TAG FORMAT (comma-separated, 12-15 items, NO sentences):
-[primary genre], [subgenre], [instrument+adjective], [instrument+adjective], [instrument+adjective], [instrument+adjective], [instrument+adjective], [groove type], [mood], [\${bpm} bpm], [production quality], [no vocals], [instrumental]
-
-GOOD EXAMPLE for RAYE disco track:
-"disco funk, soul, punchy brass section, slapping electric bass, tight funk drums, wah guitar, organ stabs, four-on-the-floor groove, energetic, 128 bpm, studio production, no vocals, instrumental"
-
-BAD EXAMPLE (too vague):
-"pop, synths, drums, upbeat" — DO NOT do this
-
-Respond ONLY with valid JSON:
-{
-  "tags": "your 12-15 comma-separated tags here",
-  "lyrics": "[inst]",
-  "description": "genre: X"
-`;
+  const userMsg = [
+    'Generate ACE-Step music tags.',
+    'Track: "' + (track.name||'') + '" by ' + artists,
+    'BPM: ' + bpm + ' | Energy: ' + energyWord + ' | Spotify genres: ' + (genreStr||'unknown'),
+    'Style: ' + styleNote,
+    '',
+    'Output ONLY valid JSON. No explanation. No preamble.',
+    '{',
+    '  "tags": "primary genre, subgenre, instrument+adjective, instrument+adjective, instrument+adjective, instrument+adjective, groove, mood, ' + bpm + ' bpm, mix style, no vocals, instrumental",',
+    '  "lyrics": "[inst]",',
+    '  "description": "genre name"',
+    '}',
+    '',
+    'Rules: Use the artist name to determine genre. RAYE=disco/funk/soul. Taylor Swift=indie pop. Shakira=latin pop. Unknown=use Spotify genres or BPM.'
+  ].join('\n');
 
   try {
     const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
@@ -601,20 +565,23 @@ Respond ONLY with valid JSON:
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:400,
-        system: 'You are a music tag generator. You ONLY output valid JSON. Never explain, never ask questions. Output JSON immediately.',
-        messages:[{ role:'user', content:msg }]
+        max_tokens:300,
+        system: 'Output only valid JSON. No explanation.',
+        messages:[{ role:'user', content: userMsg }]
       })
     });
     if(!resp.ok){ const e=await resp.json(); throw new Error(e.error?.message||resp.status); }
     const data = await resp.json();
-    const rawText = data.content.map(b=>b.text||'').join('').trim(); const tick3 = String.fromCharCode(96,96,96); const text = rawText.split(tick3+'json').join('').split(tick3).join('').trim();
+    const rawText = data.content.map(b=>b.text||'').join('').trim();
+    const tick3 = String.fromCharCode(96,96,96);
+    const text = rawText.split(tick3+'json').join('').split(tick3).join('').trim();
     return JSON.parse(text);
   } catch(e) {
-    log(`Claude fallback (${e.message})`, 'warn');
+    log('Claude fallback: ' + e.message, 'warn');
     return fallbackPrompt(track, features, styleMode);
   }
 }
+
 
 function fallbackPrompt(track, features, styleMode) {
   const bpm     = features ? Math.round(features.tempo) : 120;
