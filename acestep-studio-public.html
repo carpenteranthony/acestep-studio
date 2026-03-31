@@ -498,7 +498,11 @@ async function fetchAudioFeatures(ids) {
   const r = await fetch(`https://api.spotify.com/v1/audio-features?ids=${ids.slice(0,100).join(',')}`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  if(!r.ok) return {};
+  // 403 = scope not available, silently skip
+  if(!r.ok) {
+    log(`Audio features niet beschikbaar (${r.status}) — Claude gebruikt artiestnaam`, 'warn');
+    return {};
+  }
   const d = await r.json();
   const m = {};
   (d.audio_features||[]).forEach(f => { if(f) m[f.id]=f; });
@@ -545,32 +549,35 @@ async function generatePrompt(track, features, styleMode, creativity) {
 
   const msg = `You are a world-class music producer writing ACE-Step music generation prompts.
 
-STEP 1 — Identify the genre from the ARTIST NAME first, not from the numbers.
+STEP 1 — Identify the genre from the ARTIST NAME. This is the most important step.
 Artist: \${artists}
 Track: "\${track.name}"
 
-What genre is \${artists} ACTUALLY known for? Base your answer on your real knowledge of this artist.
-Examples: RAYE → disco-soul-R&B (NOT reggaeton). Taylor Swift → indie pop/country pop (NOT EDM). Shakira → latin pop (NOT rock). Ofenbach → French house/electronic.
+What genre is \${artists} ACTUALLY known for? Use your real knowledge.
+- RAYE → disco, soul, R&B, funk
+- Taylor Swift → indie pop, country pop
+- Shakira → latin pop, reggaeton
+- Ofenbach → French house, electronic
+- Do NOT let BPM or danceability override your genre knowledge
 
-STEP 2 — Use the audio features to refine (BPM, energy, feel):
-BPM: \${bpm} | Energy: \${energyWord} | Danceability: \${dance.toFixed(2)} | Acousticness: \${acoustic.toFixed(2)}
+STEP 2 — Audio features (use if available):
+BPM: \${bpm} | Energy: \${energyWord} | Danceability: \${dance}
+(If BPM is "?" then no audio data — rely entirely on artist knowledge)
+
 Style directive: \${styleNote}
 
-STEP 3 — Write TAGS for ACE-Step (comma-separated, 10-14 items):
-- First item: the CORRECT genre for this artist (from Step 1)
-- Then: 4-5 instruments with one adjective each that match this genre
-- Then: groove type, mood, BPM, production style
-- These tags go DIRECTLY into the AI music model — genre accuracy is everything
+STEP 3 — Generate comma-separated TAGS (10-14 items) for ACE-Step:
+- Item 1: correct genre for THIS artist (not a generic genre)
+- Items 2-3: subgenre or era (e.g. "late 70s funk", "2020s synth-pop")
+- Items 4-7: instruments with adjectives (e.g. "punchy brass section", "slapping bass guitar", "tight snare")
+- Items 8-10: groove, mood, BPM if known
+- Item 11+: production style, "no vocals", "instrumental"
 
-STEP 4 — No vocals. Always add "no vocals" and "[inst]".
-
-Avoid these for this track: \${avoidStr}
-
-Respond ONLY with valid JSON, no markdown, no explanation:
+Respond ONLY with valid JSON, no markdown:
 {
-  "tags": "correct genre, subgenre, instrument+adjective, instrument+adjective, instrument+adjective, instrument+adjective, groove, mood, \${bpm} bpm, production style, no vocals",
+  "tags": "correct genre for this artist, subgenre, instrument+adjective, instrument+adjective, instrument+adjective, instrument+adjective, groove, mood, production style, no vocals",
   "lyrics": "[inst]",
-  "description": "one line: genre and key instruments"
+  "description": "one line: artist genre and key instruments"
 }`;
 
   try {
@@ -585,7 +592,7 @@ Respond ONLY with valid JSON, no markdown, no explanation:
     });
     if(!resp.ok){ const e=await resp.json(); throw new Error(e.error?.message||resp.status); }
     const data = await resp.json();
-    const rawText = data.content.map(b=>b.text||'').join('').trim(); const text = rawText.replace('```json','').replace('```','').trim();
+    const rawText = data.content.map(b=>b.text||'').join('').trim(); const tick3 = String.fromCharCode(96,96,96); const text = rawText.split(tick3+'json').join('').split(tick3).join('').trim();
     return JSON.parse(text);
   } catch(e) {
     log(`Claude fallback (${e.message})`, 'warn');
