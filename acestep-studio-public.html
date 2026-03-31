@@ -570,10 +570,11 @@ Output TWO things:
 CRITICAL: Avoid these unless genuinely fitting this artist: \${avoidStr}
 If this artist makes electronic music, say so. If latin pop, say so. If indie folk, say so. Do NOT default to jazz or rock.
 
+CRITICAL: The "tags" field goes DIRECTLY into ACE-Step as the music prompt. It must be comma-separated descriptors only — no sentences, no periods. Format: genre, subgenre, instruments with adjectives, groove, mood, tempo, mix style. Example: "latin pop, champeta, nylon guitar, congas, 808 bass, brass section, danceable, uplifting, 129 bpm, live band feel, punchy mix"
+
 Respond ONLY with valid JSON, no markdown:
 {
-  "tags": "specific genre, subgenre, instrument1, instrument2, instrument3, instrument4, tempo feel, mood, production, no jazz, no rock",
-  "prompt": "2-3 sentence high-fidelity description matching the tags exactly",
+  "tags": "genre, subgenre, instrument with adjective, instrument with adjective, instrument with adjective, groove type, mood, bpm, production style",
   "lyrics": "[inst]",
   "description": "genre: X, key instruments: Y"
 }`;
@@ -629,7 +630,7 @@ async function runAceStep(prompt, durationSec) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      tags:     prompt.prompt || prompt.tags,
+      tags:     prompt.tags,
       lyrics:   '[inst]',
       duration: durationSec,
       seed:     Math.floor(Math.random() * 2147483647),
