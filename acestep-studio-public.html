@@ -630,8 +630,8 @@ async function runAceStep(prompt, durationSec) {
   const requestId = data.data?.id || data.id;
   if(!requestId) throw new Error('Geen request ID van WaveSpeed');
 
-  for(let i = 0; i < 120; i++) {
-    await sleep(3000);
+  for(let i = 0; i < 240; i++) {
+    await sleep(1500);
     const pr = await fetch(`https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/predictions/${requestId}/result`);
     if(!pr.ok) continue;
     const result = await pr.json();
@@ -720,7 +720,14 @@ function setVariation(gridId, varIndex, status, audioUrl, errorMsg) {
   }
   const audioArea = document.getElementById(`var-audio-${gridId}-${varIndex}`);
   if(status==='generating') {
-    audioArea.innerHTML = `<div class="variation-generating"><div class="spinner"></div>GENEREREN...</div>`;
+    const startTime = Date.now();
+    const timerInterval = setInterval(() => {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      const el = document.getElementById('gen-timer-' + gridId + '-' + varIndex);
+      if(el) el.textContent = elapsed + 's';
+    }, 1000);
+    audioArea.dataset.timer = timerInterval;
+    audioArea.innerHTML = `<div class="variation-generating"><div class="spinner"></div>GENEREREN... <span id="gen-timer-${gridId}-${varIndex}">0s</span></div>`;
   } else if(status==='done' && audioUrl) {
     audioArea.innerHTML = `<audio controls src="${audioUrl}"></audio>`;
     const dl = document.createElement('a');
