@@ -582,13 +582,13 @@ async function runAceStep(prompt, durationSec) {
       'Prefer':        'respond-async'
     },
     body: JSON.stringify({
-      version: 'lucataco/ace-step',
+      version: '280fc4f9ee507577f880a167f639c02622421d8fecf492454320311217b688f1',
       input: {
-        tags:                 prompt.tags,
-        lyrics:               prompt.lyrics || '[instrumental]',
-        duration:             durationSec,
-        guidance_scale:       7.5,
-        num_inference_steps:  60,
+        tags:                prompt.tags,
+        lyrics:              prompt.lyrics || '[instrumental]',
+        duration:            durationSec,
+        guidance_scale:      7.5,
+        num_inference_steps: 60,
       }
     })
   });
