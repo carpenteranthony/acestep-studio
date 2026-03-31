@@ -754,8 +754,7 @@ async function generatePrompt(track, features, styleMode, creativity, spotifyGen
       '  "lyrics": "",',
       '  "description": "short family description"',
       '}'
-    ].join('
-');
+    ].join('\n');
 
     const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
       method:'POST',
