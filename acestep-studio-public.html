@@ -534,7 +534,7 @@ async function generatePrompt(track, features, styleMode, creativity, spotifyGen
   const energy    = features ? features.energy    : 0.5;
   const valence   = features ? features.valence   : 0.5;
   const dance     = features ? features.danceability : 0.5;
-  const genreStr  = spotifyGenres && genreStr;
+  const genreStr  = spotifyGenres.join(', ');
   const acoustic  = features ? features.acousticness : 0.3;
   const instrness = features ? features.instrumentalness : 0.1;
 
