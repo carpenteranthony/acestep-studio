@@ -822,6 +822,11 @@ async function startGeneration() {
       const gridId = `variations-grid-${index}`;
 
       for(let v=0; v<variations; v++) {
+        // 12s delay between variations to avoid rate limiting (max 6/min = 1 per 10s)
+        if(v > 0) {
+          log(`[${track.name}] Even wachten (12s) voor rate limit...`);
+          await sleep(12000);
+        }
         setVariation(gridId, v, 'generating');
         log(`[${track.name}] Variatie ${v+1}/${variations} → ACE-Step...`);
         try {
@@ -829,8 +834,22 @@ async function startGeneration() {
           setVariation(gridId, v, 'done', url);
           log(`[${track.name}] ✓ Variatie ${v+1} klaar`, 'success');
         } catch(e) {
-          setVariation(gridId, v, 'error', null, e.message);
-          log(`[${track.name}] ✗ Variatie ${v+1}: ${e.message}`, 'error');
+          // On throttle: wait 15s and retry once
+          if(e.message.includes('throttled') || e.message.includes('rate limit')) {
+            log(`[${track.name}] Rate limit — 15s wachten en opnieuw...`, 'warn');
+            await sleep(15000);
+            try {
+              const url = await runAceStep(prompt, duration);
+              setVariation(gridId, v, 'done', url);
+              log(`[${track.name}] ✓ Variatie ${v+1} klaar (retry)`, 'success');
+            } catch(e2) {
+              setVariation(gridId, v, 'error', null, e2.message);
+              log(`[${track.name}] ✗ Variatie ${v+1}: ${e2.message}`, 'error');
+            }
+          } else {
+            setVariation(gridId, v, 'error', null, e.message);
+            log(`[${track.name}] ✗ Variatie ${v+1}: ${e.message}`, 'error');
+          }
         }
         done++;
         setProgress(done, total);
