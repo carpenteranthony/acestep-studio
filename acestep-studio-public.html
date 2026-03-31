@@ -527,43 +527,42 @@ async function generatePrompt(track, features, styleMode, creativity) {
   const creativeNote = creativity>=8?'Be highly experimental.':creativity>=5?'Balance creativity with accessibility.':'Keep it grounded and familiar.';
 
   // Build energy/groove/mix descriptors from audio features
+
   const energyWord = energy>0.75?'high energy':energy>0.45?'medium energy':'low energy';
-  const grooveType = dance>0.75?'groove-driven and danceable':dance>0.45?'steady, consistent groove':'subtle and laid-back';
-  const mixFeel = acoustic>0.6?'warm, organic, live recording feel':energy>0.7?'punchy, modern, clean mix':'polished, balanced, clean mix';
-  const structureHint = durationSec>60?'clear intro, build-up, core section, breakdown and outro':'loopable with clear intro and hook';
+  const grooveType = dance>0.75?'highly danceable, groove-driven':dance>0.45?'steady groove':'subtle, laid-back';
+  const mixFeel = acoustic>0.6?'warm organic feel, live band recording':energy>0.7?'punchy, modern club mix':'clean, polished production';
+  const structureHint = durationSec>60?'with clear intro, build, drop, breakdown and outro':'loopable with clear hook';
 
-  const msg = `You are a world-class music producer writing prompts for ACE-Step, an AI music generation model.
+  const msg = `You are a world-class music producer and sound designer. Your job is to write a highly specific, musically accurate ACE-Step generation prompt.
 
-Generate a fully INSTRUMENTAL prompt (absolutely no vocals, no singing, no voice, no spoken word) inspired by the musical feel of this track.
+TRACK: "${track.name}" by ${artists}
+BPM: ${bpm} | Key: ${key} | Energy: ${energyWord} (${energy.toFixed(2)}) | Danceability: ${dance.toFixed(2)} | Acousticness: ${acoustic.toFixed(2)} | Valence: ${valence.toFixed(2)}
+Style directive: ${styleNote}
 
-Track data:
-- Track: "${track.name}" by ${artists}
-- BPM: ${bpm} | Key: ${key}
-- Energy: ${energyWord} (${energy.toFixed(2)}) | Danceability: ${dance.toFixed(2)}
-- Acousticness: ${acoustic.toFixed(2)} | Valence: ${valence.toFixed(2)}
+Use your knowledge of "${artists}" as an artist and the track title "${track.name}" to write a musically accurate prompt. Think about:
+- What genre(s) is this artist actually known for?
+- What instruments, rhythms and production style define their sound?
+- What is the energy and mood of this specific track title?
 
-Style directive: ${styleNote} ${creativeNote}
-
-Write the ACE-Step prompt as ONE flowing paragraph (2-4 sentences) using this exact structure:
-[SPECIFIC GENRE + optional ERA] + [ENERGY LEVEL] + [3-5 NAMED INSTRUMENTS with adjectives] + [GROOVE: ${grooveType}] + [STRUCTURE: ${structureHint}] + [MIX: ${mixFeel}]
+Then write ONE flowing paragraph (3-5 sentences) for ACE-Step using this structure:
+[SPECIFIC GENRE + ERA if relevant] + [ENERGY: ${energyWord}] + [REAL INSTRUMENTS with adjectives that match this artist's style] + [GROOVE: ${grooveType}] + [STRUCTURE: ${structureHint}] + [MIX: ${mixFeel}]
 
 Rules:
-- Very specific genre: "latin pop" not "pop", "deep house" not "house", "indie folk" not "folk"
-- Every instrument must have an adjective: "warm fingerpicked nylon guitar" not "guitar", "punchy analog 808 bass" not "bass"
-- Name the groove explicitly: four-on-the-floor / swing feel / driving pulse / bouncy / laid-back
-- Avoid generic AI music cliches and EDM festival drops unless genre demands it
-- End with the sentence: "Purely instrumental, no vocals of any kind."
+- Be artist-accurate: "Zoo" by Shakira should mention champeta, tropical percussion, Spanglish energy — not generic "latin pop"
+- Every instrument must have a descriptor: "punchy congas" not "drums", "warm nylon guitar" not "guitar"
+- Avoid clichés like "cinematic", "lush orchestral", "ethereal" unless genuinely fitting
+- No vocals, no singing: this is purely instrumental. End with: "Purely instrumental, no vocals."
+- Be concise and technical, not poetic
 
-Also output short display_tags for the UI (genre + 1-2 instruments + mood, max 8 words).
+Also write short display_tags (5-7 words) for the UI.
 
-Respond ONLY with valid JSON, no markdown, no backtick code blocks:
+Respond ONLY with valid JSON, no markdown:
 {
-  "tags": "short UI tags: genre, instrument, mood (max 8 words)",
-  "prompt": "the full 2-4 sentence flowing paragraph prompt for ACE-Step",
+  "tags": "short UI display: genre + instruments + mood (5-7 words)",
+  "prompt": "the full accurate 3-5 sentence ACE-Step prompt",
   "lyrics": "[inst]",
-  "description": "one sentence internal note"
-}
-`;
+  "description": "one sentence note"
+}`;
 
   try {
     const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
