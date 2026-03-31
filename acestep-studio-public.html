@@ -538,7 +538,7 @@ Respond ONLY with a valid JSON object (no markdown, no preamble):
 }`;
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('https://claude-proxy.anthony-3ce.workers.dev/', {
       method:'POST',
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({
@@ -571,10 +571,9 @@ function fallbackPrompt(track, features, styleMode) {
 // REPLICATE ACE-STEP
 // ============================================================
 async function runAceStep(prompt, durationSec) {
-  const startResp = await fetch('https://api.replicate.com/v1/predictions', {
+  const startResp = await fetch('https://replicate-proxy.anthony-3ce.workers.dev/proxy/v1/predictions', {
     method:'POST',
     headers:{
-      'Authorization': `Bearer ${CFG.replicateKey}`,
       'Content-Type':  'application/json',
       'Prefer':        'respond-async'
     },
@@ -598,7 +597,9 @@ async function runAceStep(prompt, durationSec) {
 
   for(let i=0; i<120; i++) {
     await sleep(3000);
-    const pr = await fetch(pollUrl, { headers:{ 'Authorization':`Bearer ${CFG.replicateKey}` }});
+    // Convert poll URL to use proxy
+    const proxyPollUrl = pollUrl.replace('https://api.replicate.com', 'https://replicate-proxy.anthony-3ce.workers.dev/proxy');
+    const pr = await fetch(proxyPollUrl);
     if(!pr.ok) continue;
     const result = await pr.json();
     if(result.status==='succeeded'){
