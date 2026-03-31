@@ -533,33 +533,40 @@ async function generatePrompt(track, features, styleMode, creativity) {
   const mixFeel = acoustic>0.6?'warm organic feel, live band recording':energy>0.7?'punchy, modern club mix':'clean, polished production';
   const structureHint = durationSec>60?'with clear intro, build, drop, breakdown and outro':'loopable with clear hook';
 
-  const msg = `You are a world-class music producer and sound designer. Your job is to write a highly specific, musically accurate ACE-Step generation prompt.
+  const msg = `You are a world-class music producer and sound designer specializing in high-fidelity AI music prompts.
 
-TRACK: "${track.name}" by ${artists}
-BPM: ${bpm} | Key: ${key} | Energy: ${energyWord} (${energy.toFixed(2)}) | Danceability: ${dance.toFixed(2)} | Acousticness: ${acoustic.toFixed(2)} | Valence: ${valence.toFixed(2)}
+Generate a prompt for ACE-Step that maximizes INSTRUMENT QUALITY and REALISM. The output must be purely instrumental — zero vocals.
+
+Track: "${track.name}" by ${artists}
+BPM: ${bpm} | Key: ${key} | Energy: ${energyWord} (${energy.toFixed(2)}) | Danceability: ${dance.toFixed(2)} | Acousticness: ${acoustic.toFixed(2)}
 Style directive: ${styleNote}
 
-Use your knowledge of "${artists}" as an artist and the track title "${track.name}" to write a musically accurate prompt. Think about:
-- What genre(s) is this artist actually known for?
-- What instruments, rhythms and production style define their sound?
-- What is the energy and mood of this specific track title?
+Use your knowledge of "${artists}" and "${track.name}" to write a musically accurate, high-fidelity prompt.
 
-Then write ONE flowing paragraph (3-5 sentences) for ACE-Step using this structure:
-[SPECIFIC GENRE + ERA if relevant] + [ENERGY: ${energyWord}] + [REAL INSTRUMENTS with adjectives that match this artist's style] + [GROOVE: ${grooveType}] + [STRUCTURE: ${structureHint}] + [MIX: ${mixFeel}]
+Write ONE paragraph (3-5 sentences) covering:
+1. GENRE + ERA — be very specific (e.g. "late 90s latin pop" not "pop")
+2. INSTRUMENTS — name 4-6 instruments with rich timbral descriptors:
+   - Attack/texture: "plucked", "bowed", "fingerpicked", "hammered", "breathy", "punchy", "warm", "bright", "dark", "crisp"
+   - Space: "close-mic'd", "roomy", "dry", "with natural reverb", "intimate"
+   - Quality: "studio-grade", "vintage", "modern", "analog", "live"
+   Examples: "warm fingerpicked nylon guitar with natural room tone", "punchy vintage congas with short decay", "deep analog bass with smooth attack"
+3. GROOVE — rhythm feel: four-on-the-floor / syncopated / swing / driving / laid-back / bouncy
+4. STRUCTURE — clear sections: intro / build / main / breakdown / outro
+5. MIX — production character: "clean polished mix", "warm analog mix", "punchy modern mix", "open and airy", "dense and layered"
+6. End with: "Purely instrumental, no vocals whatsoever."
 
 Rules:
-- Be artist-accurate: "Zoo" by Shakira should mention champeta, tropical percussion, Spanglish energy — not generic "latin pop"
-- Every instrument must have a descriptor: "punchy congas" not "drums", "warm nylon guitar" not "guitar"
-- Avoid clichés like "cinematic", "lush orchestral", "ethereal" unless genuinely fitting
-- No vocals, no singing: this is purely instrumental. End with: "Purely instrumental, no vocals."
-- Be concise and technical, not poetic
+- Never use vague words: "nice", "beautiful", "amazing", "rich"
+- Every instrument must have at least 2 descriptors
+- Avoid generic AI clichés: "lush orchestral", "ethereal", "cinematic" unless truly fitting
+- Be technically specific — a music producer should recognize exactly what this track sounds like from the prompt alone
 
 Also write short display_tags (5-7 words) for the UI.
 
 Respond ONLY with valid JSON, no markdown:
 {
-  "tags": "short UI display: genre + instruments + mood (5-7 words)",
-  "prompt": "the full accurate 3-5 sentence ACE-Step prompt",
+  "tags": "genre + 2 key instruments + mood (5-7 words)",
+  "prompt": "the full high-fidelity 3-5 sentence ACE-Step prompt",
   "lyrics": "[inst]",
   "description": "one sentence note"
 }`;
@@ -612,10 +619,10 @@ function fallbackPrompt(track, features, styleMode) {
 // ============================================================
 async function runAceStep(prompt, durationSec) {
   const startResp = await fetch('https://replicate-proxy.anthony-3ce.workers.dev/proxy/v1/predictions', {
-    method:'POST',
-    headers:{
-      'Content-Type':  'application/json',
-      'Prefer':        'respond-async'
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer':       'respond-async',
     },
     body: JSON.stringify({
       version: '280fc4f9ee507577f880a167f639c02622421d8fecf492454320311217b688f1',
@@ -623,35 +630,35 @@ async function runAceStep(prompt, durationSec) {
         tags:                prompt.prompt || prompt.tags,
         lyrics:              '[inst]',
         duration:            durationSec,
-        guidance_scale:      7.0,
-        num_inference_steps: 60,
+        guidance_scale:      7.5,
+        num_inference_steps: 100,
         seed:                Math.floor(Math.random() * 2147483647),
-        output_format:       'wav',
       }
     })
   });
-  if(!startResp.ok){
-    const e = await startResp.json();
-    throw new Error(`Replicate start mislukt: ${e.detail||startResp.status}`);
+
+  if(!startResp.ok) {
+    const e = await startResp.json().catch(() => ({}));
+    throw new Error(`Replicate start mislukt: ${e.detail || startResp.status}`);
   }
+
   const pred    = await startResp.json();
   const pollUrl = pred.urls?.get || `https://api.replicate.com/v1/predictions/${pred.id}`;
 
-  for(let i=0; i<120; i++) {
+  for(let i = 0; i < 120; i++) {
     await sleep(3000);
-    // Convert poll URL to use proxy
     const proxyPollUrl = pollUrl.replace('https://api.replicate.com', 'https://replicate-proxy.anthony-3ce.workers.dev/proxy');
     const pr = await fetch(proxyPollUrl);
     if(!pr.ok) continue;
     const result = await pr.json();
-    if(result.status==='succeeded'){
+    if(result.status === 'succeeded') {
       const out = result.output;
       if(Array.isArray(out)) return out[0];
-      if(typeof out==='string') return out;
+      if(typeof out === 'string') return out;
       throw new Error('Onbekend output formaat');
     }
-    if(result.status==='failed')   throw new Error(`ACE-Step fout: ${result.error||'onbekend'}`);
-    if(result.status==='canceled') throw new Error('Geannuleerd');
+    if(result.status === 'failed')   throw new Error(`ACE-Step fout: ${result.error || 'onbekend'}`);
+    if(result.status === 'canceled') throw new Error('Geannuleerd');
   }
   throw new Error('Timeout na 6 minuten');
 }
