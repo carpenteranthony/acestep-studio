@@ -310,15 +310,19 @@ async function spotifyLogin() {
   const challenge = await generateCodeChallenge(verifier);
   sessionStorage.setItem('pkce_verifier', verifier);
 
+  const redirectUri = CFG.redirectUri;
   const params = new URLSearchParams({
     client_id:             CFG.spotifyClientId,
     response_type:         'code',
-    redirect_uri:          CFG.redirectUri,
+    redirect_uri:          redirectUri,
     code_challenge_method: 'S256',
     code_challenge:        challenge,
     scope:                 SPOTIFY_SCOPES,
   });
-  window.location = `https://accounts.spotify.com/authorize?${params}`;
+  const url = `https://accounts.spotify.com/authorize?${params}`;
+  console.log('Redirect URI used:', redirectUri);
+  console.log('Full authorize URL:', url);
+  window.location = url;
 }
 
 async function exchangeCodeForToken(code) {
