@@ -1,69 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="nl">
 <head>
-<meta charset="UTF-8">
-<title>ACE Remix Tool</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ACE Audio Remix Tool</title>
 <style>
-body { font-family: Arial; background:#111; color:#fff; padding:20px }
-textarea { width:100%; height:120px; margin-top:10px; background:#000; color:#0f0 }
-button { margin-top:10px; padding:10px; }
+:root{
+  --bg:#0a0a0a; --panel:#15161a; --panel2:#0f1014; --border:#2a2a32;
+  --text:#e8e8f0; --dim:#8a8a9a; --accent:#00ff88; --red:#ff5c70; --blue:#4d9fff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:24px}
+h1{margin:0 0 8px;font-size:30px}
+.sub{color:var(--dim);margin:0 0 20px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+label{display:block;font-size:12px;color:var(--dim);margin:0 0 8px;text-transform:uppercase;letter-spacing:1px}
+input,textarea,select{
+  width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:12px;font:inherit
+}
+textarea{min-height:110px;resize:vertical}
+button{
+  background:var(--accent);color:#000;border:none;border-radius:8px;padding:14px 18px;
+  font-weight:700;cursor:pointer
+}
+button.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+button:disabled{opacity:.55;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.status{margin-top:12px;font-size:14px;color:var(--dim);line-height:1.5}
+.err{color:var(--red)} .ok{color:var(--accent)} .info{color:var(--blue)}
+audio{width:100%;margin-top:12px}
+small{color:var(--dim);display:block;margin-top:8px;line-height:1.5}
+pre{
+  margin:12px 0 0;background:#0b0c10;color:#cfd3dc;border:1px solid var(--border);
+  border-radius:8px;padding:12px;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;
+  max-height:300px;overflow:auto
+}
+.pill{display:inline-block;font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:999px;color:var(--dim)}
+@media(max-width:850px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
+<div class="wrap">
+  <h1>ACE Audio-to-Audio Remix</h1>
+  <p class="sub">
+    Deze versie gebruikt de WaveSpeed <strong>ACE-Step Audio-to-Audio</strong> endpoint.
+    Je hebt een <strong>directe HTTPS-audio URL</strong> nodig, geen Spotify-link.
+  </p>
 
-<h2>ACE Audio Remix (HIGH QUALITY MODE)</h2>
+  <div class="grid">
+    <div class="card">
+      <label>Bron audio URL</label>
+      <input id="audioUrl" placeholder="https://.../source.mp3 of .wav" />
+      <small>Moet een direct bereikbare HTTPS-audiolink zijn. Spotify track-URLs werken hier niet.</small>
 
-<input id="audioUrl" placeholder="Paste audio URL (MP3/WAV)" style="width:100%;padding:10px"/>
+      <label style="margin-top:14px">Original tags</label>
+      <textarea id="originalTags">dance pop, electronic, female vocal, synths, punchy kick</textarea>
+      <small>Beschrijf wat de bron nu is.</small>
 
-<h3>Tags (EDIT BEFORE RENDER)</h3>
-<textarea id="tags">
-latin pop, live percussion, warm bass, organic drums, full arrangement, instrumental, no vocals, natural outro
-</textarea>
+      <label style="margin-top:14px">Target tags</label>
+      <textarea id="targetTags">deep house, warm analog bass, punchy kick, rhodes chords, smooth groove, organic percussion, instrumental, no vocals, natural outro</textarea>
+      <small>Beschrijf waar je naartoe wilt. Kort en specifiek werkt meestal beter.</small>
 
-<button onclick="runRemix()">RENDER REMIX</button>
+      <div class="row" style="margin-top:14px">
+        <div style="flex:1;min-width:170px">
+          <label>Edit mode</label>
+          <select id="editMode">
+            <option value="remix" selected>remix</option>
+            <option value="lyrics">lyrics</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:170px">
+          <label>Seed</label>
+          <input id="seed" type="number" value="-1" />
+        </div>
+      </div>
 
-<p id="status"></p>
-<audio id="player" controls></audio>
+      <div class="row" style="margin-top:16px">
+        <button id="runBtn" onclick="runRemix()">Render remix</button>
+        <button class="secondary" onclick="fillOrganicPreset()">Organisch preset</button>
+        <span class="pill">Endpoint: ace-step/audio-to-audio</span>
+      </div>
+
+      <div class="status" id="status">Klaar om te starten.</div>
+    </div>
+
+    <div class="card">
+      <label>Resultaat</label>
+      <audio id="player" controls></audio>
+      <small id="resultMeta">Nog geen output.</small>
+
+      <label style="margin-top:14px">Debug response</label>
+      <pre id="debugBox">Nog geen debug-output.</pre>
+    </div>
+  </div>
+</div>
 
 <script>
+const SUBMIT_URL = 'https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/wavespeed-ai/ace-step/audio-to-audio';
+const POLL_BASE  = 'https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/predictions';
+
+function setStatus(msg, cls='') {
+  const el = document.getElementById('status');
+  el.className = 'status ' + cls;
+  el.textContent = msg;
+}
+function setDebug(obj) {
+  const box = document.getElementById('debugBox');
+  box.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+}
+function fillOrganicPreset() {
+  document.getElementById('originalTags').value = 'dance pop, electronic, female vocal, synths, punchy kick';
+  document.getElementById('targetTags').value = 'deep house, warm analog bass, punchy kick, rhodes chords, smooth groove, organic percussion, instrumental, no vocals, natural outro';
+}
+async function safeJson(res){
+  const txt = await res.text();
+  try { return JSON.parse(txt); } catch { return { raw: txt, status: res.status }; }
+}
 async function runRemix(){
-  const url = document.getElementById('audioUrl').value;
-  const tags = document.getElementById('tags').value;
-  document.getElementById('status').innerText = "Rendering...";
+  const btn = document.getElementById('runBtn');
+  const audio = document.getElementById('audioUrl').value.trim();
+  const original_tags = document.getElementById('originalTags').value.trim();
+  const tags = document.getElementById('targetTags').value.trim();
+  const edit_mode = document.getElementById('editMode').value;
+  const seed = parseInt(document.getElementById('seed').value || '-1', 10);
 
-  const res = await fetch('https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/wavespeed-ai/ace-step-audio-to-audio', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      audio_url: url,
-      tags: tags,
-      edit_mode: "remix",
-      lyrics: "[inst]"
-    })
-  });
+  if (!audio) { setStatus('Voer eerst een directe audio-URL in.', 'err'); return; }
+  if (!/^https:\/\//i.test(audio)) { setStatus('Audio URL moet met https:// beginnen.', 'err'); return; }
+  if (!original_tags) { setStatus('original_tags ontbreekt.', 'err'); return; }
+  if (!tags) { setStatus('target tags ontbreken.', 'err'); return; }
 
-  const data = await res.json();
-  const id = data.data?.id;
+  btn.disabled = true;
+  document.getElementById('player').removeAttribute('src');
+  document.getElementById('player').load();
+  document.getElementById('resultMeta').textContent = 'Nog geen output.';
+  setStatus('Job starten...', 'info');
+  setDebug({submit_url: SUBMIT_URL, payload_preview: {audio, original_tags, tags, edit_mode, original_lyrics: '', lyrics: '', seed}});
 
-  if(!id){
-    document.getElementById('status').innerText = "Error starting job";
-    return;
-  }
+  const payload = {
+    audio,
+    original_tags,
+    tags,
+    edit_mode,
+    original_lyrics: '',
+    lyrics: '',
+    seed
+  };
 
-  for(let i=0;i<120;i++){
-    await new Promise(r=>setTimeout(r,2000));
-    const poll = await fetch('https://wavespeedai.anthony-3ce.workers.dev/proxy/api/v3/predictions/'+id+'/result');
-    const out = await poll.json();
-    if(out.status==="completed"){
-      document.getElementById('player').src = out.output[0];
-      document.getElementById('status').innerText = "Done";
+  try {
+    const res = await fetch(SUBMIT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+
+    const start = await safeJson(res);
+    setDebug(start);
+
+    if (!res.ok) {
+      setStatus('Start mislukt: HTTP ' + res.status, 'err');
+      btn.disabled = false;
       return;
     }
-  }
 
-  document.getElementById('status').innerText = "Timeout";
+    const id = start?.data?.id || start?.id;
+    if (!id) {
+      setStatus('Error starting job: geen data.id ontvangen.', 'err');
+      btn.disabled = false;
+      return;
+    }
+
+    setStatus('Job gestart. Polling...', 'info');
+
+    for(let i=0;i<240;i++){
+      await new Promise(r=>setTimeout(r, 2500));
+      const pollRes = await fetch(`${POLL_BASE}/${id}/result`);
+      const out = await safeJson(pollRes);
+      setDebug(out);
+
+      const status = out?.data?.status || out?.status || 'unknown';
+      const outputs = out?.data?.outputs || out?.outputs || [];
+      const error = out?.data?.error || out?.error || '';
+
+      if (status === 'completed' || status === 'succeeded') {
+        const url = outputs[0] || out?.data?.url || out?.url;
+        if (url) {
+          document.getElementById('player').src = url;
+          document.getElementById('resultMeta').textContent = 'Output URL: ' + url;
+          setStatus('Klaar.', 'ok');
+          btn.disabled = false;
+          return;
+        }
+        setStatus('Job klaar, maar geen output URL ontvangen.', 'err');
+        btn.disabled = false;
+        return;
+      }
+
+      if (status === 'failed') {
+        setStatus('Job gefaald: ' + (error || 'onbekende fout'), 'err');
+        btn.disabled = false;
+        return;
+      }
+
+      setStatus('Status: ' + status + ' ...', 'info');
+    }
+
+    setStatus('Timeout na 10 minuten.', 'err');
+  } catch (e) {
+    setStatus('Netwerk-/scriptfout: ' + e.message, 'err');
+    setDebug({error: e.message});
+  } finally {
+    btn.disabled = false;
+  }
 }
 </script>
-
 </body>
 </html>
