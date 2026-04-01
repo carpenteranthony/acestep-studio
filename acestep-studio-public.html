@@ -166,17 +166,18 @@ async function runRemix(){
     }
 
     const id = start?.data?.id || start?.id;
-    if (!id) {
-      setStatus('Error starting job: geen data.id ontvangen.', 'err');
+    const pollUrl = start?.data?.urls?.get || (id ? `${POLL_BASE}/${id}/result` : '');
+    if (!id || !pollUrl) {
+      setStatus('Error starting job: geen geldige poll URL ontvangen.', 'err');
       btn.disabled = false;
       return;
     }
 
     setStatus('Job gestart. Polling...', 'info');
 
-    for(let i=0;i<240;i++){
+    for(let i=0;i<360;i++){
       await new Promise(r=>setTimeout(r, 2500));
-      const pollRes = await fetch(`${POLL_BASE}/${id}/result`);
+      const pollRes = await fetch(pollUrl);
       const out = await safeJson(pollRes);
       setDebug(out);
 
@@ -207,7 +208,7 @@ async function runRemix(){
       setStatus('Status: ' + status + ' ...', 'info');
     }
 
-    setStatus('Timeout na 10 minuten.', 'err');
+    setStatus('Timeout na 15 minuten.', 'err');
   } catch (e) {
     setStatus('Netwerk-/scriptfout: ' + e.message, 'err');
     setDebug({error: e.message});
