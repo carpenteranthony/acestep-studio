@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ACE Remix Pro</title>
+<title>ACE Remix Pro Ultimate</title>
 <style>
 :root{
   --bg:#0a0a0a; --panel:#15161a; --panel2:#0f1014; --border:#2a2a32;
-  --text:#e8e8f0; --dim:#8a8a9a; --accent:#00ff88; --red:#ff5c70; --blue:#4d9fff; --purple:#8f7cff;
+  --text:#e8e8f0; --dim:#8a8a9a; --accent:#00ff88; --red:#ff5c70; --blue:#4d9fff; --yellow:#ffcc66;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:24px}
+.wrap{max-width:1240px;margin:0 auto;padding:24px}
 h1{margin:0 0 8px;font-size:30px}
-.sub{color:var(--dim);margin:0 0 20px;line-height:1.5}
+.sub{color:var(--dim);margin:0 0 20px;line-height:1.55}
 .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
 label{display:block;font-size:12px;color:var(--dim);margin:0 0 8px;text-transform:uppercase;letter-spacing:1px}
@@ -27,10 +27,11 @@ button{
   font-weight:700;cursor:pointer
 }
 button.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+button.warn{background:var(--yellow);color:#000}
 button:disabled{opacity:.55;cursor:not-allowed}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .status{margin-top:12px;font-size:14px;color:var(--dim);line-height:1.5}
-.err{color:var(--red)} .ok{color:var(--accent)} .info{color:var(--blue)}
+.err{color:var(--red)} .ok{color:var(--accent)} .info{color:var(--blue)} .warnText{color:var(--yellow)}
 audio{width:100%;margin-top:10px}
 small{color:var(--dim);display:block;margin-top:8px;line-height:1.5}
 pre{
@@ -44,37 +45,46 @@ pre{
 .variant h4{margin:0 0 6px;font-size:14px}
 .meta{font-size:12px;color:var(--dim)}
 hr{border:none;border-top:1px solid var(--border);margin:14px 0}
-@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.link{color:var(--accent)}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:8px;font-size:12px;color:var(--dim);margin-top:10px}
+@media(max-width:980px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>ACE Remix Pro</h1>
+  <h1>ACE Remix Pro Ultimate</h1>
   <p class="sub">
-    Gebouwd rond de research-aanpak: <strong>Audio-to-Audio remix</strong> voor structuur,
-    optioneel <strong>Auto-Outro</strong> via Audio Outpaint, en <strong>multi-seed scan</strong>
-    voor betere kans op muzikale resultaten.
+    Deze versie doet drie dingen strak achter elkaar: <strong>upload</strong>, <strong>bron-audio valideren</strong>,
+    en pas daarna <strong>ACE Audio-to-Audio remix</strong>. Daarmee vangen we precies de bottleneck af waar jij op vastliep.
   </p>
 
   <div class="grid">
     <div class="card">
-      <label>Bron audio URL</label>
-      <input id="audioUrl" placeholder="https://.../source.wav of .mp3">
-      <small>Gebruik een directe HTTPS-audiolink. Of upload hieronder.</small>
-
-      <label style="margin-top:12px">Upload audiofile</label>
+      <label>1) Upload audiofile</label>
       <input id="audioFile" type="file" accept=".wav,.mp3,.flac,.m4a,.aac,.ogg,audio/*">
-      <small>Upload gaat via de WaveSpeed media upload endpoint achter je proxy.</small>
+      <small>Gebruik bij voorkeur een schone korte WAV of MP3. Deze tool uploadt eerst en test daarna expliciet of de teruggegeven download-URL echt audio afspeelt.</small>
+
+      <div class="row" style="margin-top:12px">
+        <button id="uploadBtn" class="warn" onclick="uploadAndValidate()">Upload + validate</button>
+        <button class="secondary" onclick="checkBalance()">Check balance</button>
+      </div>
+
+      <div class="kv">
+        <div>Upload status</div><div id="uploadStatus">Nog niets geüpload.</div>
+        <div>Download URL</div><div id="downloadUrlWrap">—</div>
+      </div>
+
+      <audio id="sourcePlayer" controls></audio>
 
       <hr>
 
-      <label>Original tags</label>
+      <label>2) Original tags</label>
       <textarea id="originalTags">dance pop, electronic, female vocal, synths, punchy kick</textarea>
       <small>Beschrijf eerlijk wat de bron nu is.</small>
 
-      <label style="margin-top:12px">Target tags</label>
-      <textarea id="targetTags">deep house, 124bpm, warm analog bass, punchy kick, rhodes chords, organic percussion, smooth transitions, club mix, instrumental</textarea>
-      <small>Kort en concreet werkt beter dan lange zinnen.</small>
+      <label style="margin-top:12px">3) Target tags (editbaar vóór render)</label>
+      <textarea id="targetTags">deep house, 124bpm, warm analog bass, punchy kick, rhodes chords, organic percussion, smooth transitions, club mix, instrumental, no vocals, natural outro</textarea>
+      <small>Kort en concreet werkt beter. Gebruik echte instrumenten en een duidelijk arrangement.</small>
 
       <div class="row" style="margin-top:12px">
         <div style="flex:1;min-width:180px">
@@ -91,7 +101,7 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
             <option value="locked">vaste seed</option>
           </select>
         </div>
-        <div style="flex:1;min-width:120px">
+        <div style="flex:1;min-width:140px">
           <label>Base seed</label>
           <input id="seed" type="number" value="120034">
         </div>
@@ -118,10 +128,10 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
       </div>
 
       <div class="row" style="margin-top:16px">
-        <button id="balanceBtn" class="secondary" onclick="checkBalance()">Check balance</button>
         <button id="runBtn" onclick="runPipeline()">Start remix pipeline</button>
         <button class="secondary" onclick="fillPreset('latin')">Latin preset</button>
         <button class="secondary" onclick="fillPreset('house')">House preset</button>
+        <button class="secondary" onclick="fillPreset('organicPop')">Organic pop</button>
       </div>
 
       <div class="status" id="status">Klaar om te starten.</div>
@@ -134,10 +144,11 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
       <small id="resultMeta">Nog geen output.</small>
       <hr>
       <div class="row">
+        <span class="pill">Media Upload</span>
+        <span class="pill">Audio Validation</span>
         <span class="pill">Audio-to-Audio</span>
         <span class="pill">Audio Outpaint</span>
-        <span class="pill">Media Upload</span>
-        <span class="pill">Balance Check</span>
+        <span class="pill">Multi-seed</span>
       </div>
     </div>
   </div>
@@ -151,6 +162,9 @@ const POLL_BASE = `${PROXY}/api/v3/predictions`;
 const UPLOAD_URL = `${PROXY}/api/v3/media/upload/binary`;
 const BALANCE_URL = `${PROXY}/api/v3/balance`;
 
+let uploadedDownloadUrl = '';
+let lastUploadResponse = null;
+
 function setStatus(msg, cls='') {
   const el = document.getElementById('status');
   el.className = 'status ' + cls;
@@ -160,26 +174,29 @@ function setDebug(obj) {
   document.getElementById('debugBox').textContent =
     typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
 }
+function clearResults() {
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('resultMeta').textContent = 'Nog geen output.';
+}
 function addResultCard(title, meta, audioUrl) {
   const wrap = document.getElementById('results');
   const div = document.createElement('div');
   div.className = 'variant';
   div.innerHTML = `<h4>${title}</h4><div class="meta">${meta}</div>
     <audio controls src="${audioUrl}"></audio>
-    <div style="margin-top:8px"><a href="${audioUrl}" target="_blank" style="color:#00ff88">open audio</a></div>`;
+    <div style="margin-top:8px"><a class="link" href="${audioUrl}" target="_blank">open audio</a></div>`;
   wrap.appendChild(div);
-}
-function clearResults() {
-  document.getElementById('results').innerHTML = '';
-  document.getElementById('resultMeta').textContent = 'Nog geen output.';
 }
 function fillPreset(kind) {
   if (kind === 'latin') {
     document.getElementById('originalTags').value = 'pop, latin pop, female vocal, bass guitar, rhythm guitar';
-    document.getElementById('targetTags').value = 'latin pop, 105bpm, live percussion, congas, timbales, guiro, nylon guitar, warm electric bass, brass accents, radio mix, instrumental';
+    document.getElementById('targetTags').value = 'latin pop, 105bpm, live percussion, congas, timbales, guiro, nylon guitar, warm electric bass, brass accents, radio mix, instrumental, no vocals, natural outro';
+  } else if (kind === 'organicPop') {
+    document.getElementById('originalTags').value = 'modern pop, electronic, female vocal, kick, synth layers';
+    document.getElementById('targetTags').value = 'organic pop, live drums, warm bass guitar, piano, electric guitar support, strings, full arrangement, polished mix, instrumental, no vocals, natural outro';
   } else {
     document.getElementById('originalTags').value = 'dance pop, electronic, female vocal, synths, punchy kick';
-    document.getElementById('targetTags').value = 'deep house, 124bpm, warm analog bass, punchy kick, rhodes chords, shakers, organic percussion, smooth transitions, club mix, instrumental';
+    document.getElementById('targetTags').value = 'deep house, 124bpm, warm analog bass, punchy kick, rhodes chords, shakers, organic percussion, smooth transitions, club mix, instrumental, no vocals, natural outro';
   }
 }
 async function safeJson(res){
@@ -194,22 +211,84 @@ async function checkBalance() {
   if (res.ok) setStatus('Balance opgehaald.', 'ok');
   else setStatus('Balance check mislukt.', 'err');
 }
-async function uploadFileIfNeeded() {
+async function validateAudioUrl(url) {
+  return new Promise((resolve) => {
+    const player = document.getElementById('sourcePlayer');
+    let done = false;
+    const cleanup = () => {
+      player.oncanplay = null;
+      player.onerror = null;
+      player.onloadedmetadata = null;
+    };
+    const ok = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve({ ok: true });
+    };
+    const fail = (reason) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve({ ok: false, reason });
+    };
+    player.oncanplay = ok;
+    player.onloadedmetadata = ok;
+    player.onerror = () => fail('Browser kan de upload-URL niet als audio laden.');
+    player.src = url;
+    player.load();
+    setTimeout(() => fail('Timeout: upload-URL gaf niet tijdig bruikbare audio terug.'), 12000);
+  });
+}
+async function uploadAndValidate() {
   const file = document.getElementById('audioFile').files[0];
-  const existingUrl = document.getElementById('audioUrl').value.trim();
-  if (existingUrl) return existingUrl;
-  if (!file) return '';
+  if (!file) {
+    setStatus('Kies eerst een bestand.', 'err');
+    return;
+  }
   setStatus('Uploaden...', 'info');
+  document.getElementById('uploadStatus').textContent = 'Uploading...';
+  document.getElementById('downloadUrlWrap').textContent = '—';
+  uploadedDownloadUrl = '';
+  lastUploadResponse = null;
+
   const fd = new FormData();
   fd.append('file', file, file.name);
+
   const res = await fetch(UPLOAD_URL, { method:'POST', body: fd });
   const data = await safeJson(res);
   setDebug(data);
-  if (!res.ok) throw new Error(data?.message || `Upload mislukt (${res.status})`);
-  const url = data?.data?.download_url || data?.download_url;
-  if (!url) throw new Error('Geen download_url van upload ontvangen');
-  document.getElementById('audioUrl').value = url;
-  return url;
+  lastUploadResponse = data;
+
+  if (!res.ok) {
+    setStatus('Upload mislukt.', 'err');
+    document.getElementById('uploadStatus').textContent = 'Upload failed';
+    return;
+  }
+
+  const d = data?.data || {};
+  const url = d.download_url || data?.download_url || '';
+  const type = d.type || data?.type || 'unknown';
+  const filename = d.filename || data?.filename || file.name;
+  const size = d.size || data?.size || file.size;
+
+  document.getElementById('uploadStatus').textContent = `type=${type} · filename=${filename} · size=${size}`;
+  document.getElementById('downloadUrlWrap').innerHTML = url ? `<a class="link" href="${url}" target="_blank">${url}</a>` : 'Geen download_url';
+  uploadedDownloadUrl = url;
+
+  if (!url) {
+    setStatus('Upload ok, maar geen download_url ontvangen.', 'err');
+    return;
+  }
+
+  setStatus('Upload klaar. Audio valideren...', 'info');
+  const validation = await validateAudioUrl(url);
+  setDebug({ upload_response: data, validation });
+  if (validation.ok) {
+    setStatus('Upload-URL is bruikbare audio. Klaar voor remix.', 'ok');
+  } else {
+    setStatus(`Upload-URL faalt als audio: ${validation.reason}`, 'err');
+  }
 }
 async function startJob(url, payload) {
   const res = await fetch(url, {
@@ -254,7 +333,7 @@ async function runPipeline() {
   clearResults();
 
   try {
-    const audio = await uploadFileIfNeeded();
+    const audio = uploadedDownloadUrl || '';
     const original_tags = document.getElementById('originalTags').value.trim();
     const tags = document.getElementById('targetTags').value.trim();
     const edit_mode = document.getElementById('editMode').value;
@@ -263,10 +342,12 @@ async function runPipeline() {
     const variationCount = parseInt(document.getElementById('variationCount').value || '4', 10);
     const autoOutro = parseInt(document.getElementById('autoOutro').value || '0', 10);
 
-    if (!audio) throw new Error('Geen bron-audio URL of upload.');
-    if (!/^https:\/\//i.test(audio)) throw new Error('Audio URL moet met https:// beginnen.');
+    if (!audio) throw new Error('Upload eerst audio en valideer de download-URL.');
     if (!original_tags) throw new Error('original_tags ontbreekt.');
     if (!tags) throw new Error('target tags ontbreken.');
+
+    const validation = await validateAudioUrl(audio);
+    if (!validation.ok) throw new Error(`Bron-URL niet bruikbaar als audio: ${validation.reason}`);
 
     const seeds = buildSeeds(seedMode, baseSeed, variationCount);
     document.getElementById('resultMeta').textContent = `Seeds: ${seeds.join(', ')}`;
@@ -312,7 +393,7 @@ async function runPipeline() {
     setStatus('Alle varianten klaar.', 'ok');
   } catch (e) {
     setStatus(e.message, 'err');
-    setDebug({ error: e.message });
+    setDebug({ error: e.message, upload_response: lastUploadResponse });
   } finally {
     runBtn.disabled = false;
   }
