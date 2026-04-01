@@ -166,18 +166,23 @@ async function runRemix(){
     }
 
     const id = start?.data?.id || start?.id;
-    const pollUrl = start?.data?.urls?.get || (id ? `${POLL_BASE}/${id}/result` : '');
-    if (!id || !pollUrl) {
-      setStatus('Error starting job: geen geldige poll URL ontvangen.', 'err');
+    const providerPollUrl = start?.data?.urls?.get || '';
+    if (!id) {
+      setStatus('Error starting job: geen data.id ontvangen.', 'err');
       btn.disabled = false;
       return;
     }
 
-    setStatus('Job gestart. Polling...', 'info');
+    setStatus('Job gestart. Polling via proxy...', 'info');
+    setDebug({
+      start_response: start,
+      polling_via_proxy: `${POLL_BASE}/${id}/result`,
+      provider_poll_url_for_reference_only: providerPollUrl
+    });
 
-    for(let i=0;i<360;i++){
+    for(let i=0;i<240;i++){
       await new Promise(r=>setTimeout(r, 2500));
-      const pollRes = await fetch(pollUrl);
+      const pollRes = await fetch(`${POLL_BASE}/${id}/result`);
       const out = await safeJson(pollRes);
       setDebug(out);
 
@@ -208,7 +213,7 @@ async function runRemix(){
       setStatus('Status: ' + status + ' ...', 'info');
     }
 
-    setStatus('Timeout na 15 minuten.', 'err');
+    setStatus('Timeout na 10 minuten.', 'err');
   } catch (e) {
     setStatus('Netwerk-/scriptfout: ' + e.message, 'err');
     setDebug({error: e.message});
